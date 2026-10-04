@@ -21,3 +21,16 @@ The SPA calls the API through a typed Hono client in `apps/web/app/lib/api.ts`. 
 After changing bindings or vars in `apps/api/wrangler.jsonc`, run `bun run --filter @hannibox/api cf-typegen` and commit `worker-configuration.d.ts`. Typecheck fails while it is out of date.
 
 `bun run deploy` builds the SPA and runs `wrangler deploy`.
+
+## Workers Builds
+
+Cloudflare builds `main` from the repository root, with these settings under the Worker's Settings > Build:
+
+| Setting         | Value                                  |
+| --------------- | -------------------------------------- |
+| Build command   | `bun run --filter @hannibox/web build` |
+| Deploy command  | `cd apps/api && bunx wrangler deploy`  |
+| Preview command | `cd apps/api && bunx wrangler preview` |
+| Build variables | `BUN_VERSION=1.4.2`                    |
+
+Without `BUN_VERSION` the build image runs Bun 1.2.15. That version can't read `bun.lock` at `lockfileVersion` 2, which Bun 1.4 writes, so `bun install --frozen-lockfile` fails. Bun has no version file the build image reads, so the variable is the only way to pin it. Keep it at the version you run locally.
