@@ -1,11 +1,13 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter"
 import { schema } from "@hannibox/db"
-import { betterAuth } from "better-auth/minimal"
+import { betterAuth, type BetterAuthOptions } from "better-auth/minimal"
 
 type AuthConfig = {
   db: Parameters<typeof drizzleAdapter>[0]
   secret: string
-  baseURL: string
+  // A string pins one origin; `allowedHosts` resolves the host per request and
+  // feeds `trustedOrigins`, so dev, previews and custom domains all agree.
+  baseURL: BetterAuthOptions["baseURL"]
 }
 
 /** Workers hand each request its own bindings, so this runs once per request. */

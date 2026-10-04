@@ -5,10 +5,14 @@ import { createMiddleware } from "hono/factory"
 import type { Env, UserEnv } from "./env"
 
 export const withAuth = createMiddleware<Env>(async (c, next) => {
+  const { host, protocol } = new URL(c.req.url)
   const auth = createAuth({
     db: c.get("db"),
     secret: c.env.BETTER_AUTH_SECRET,
-    baseURL: new URL(c.req.url).origin,
+    baseURL: {
+      allowedHosts: [host, "localhost:5173"],
+      protocol: protocol === "http:" ? "http" : "https",
+    },
   })
   c.set("auth", auth)
   await next()
