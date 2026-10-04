@@ -1,0 +1,81 @@
+import { schema } from "@hannibox/db"
+import { IMAGE_TYPES, MAX_IMAGE_BYTES, isImageType, type ApiError } from "@hannibox/shared"
+import { and, eq, inArray } from "drizzle-orm"
+import { Hono } from "hono"
+import type { Context } from "hono"
+import { z } from "zod"
+
+import { requireUser } from "../auth"
+import type { UserEnv } from "../env"
+
+const { image, recipe } = schema
+
+export const ImageUpload = z.object({ file: z.instanceof(File) })
+
+type Owner = { recipeId: string } | { ingredientId: string }
+
+/** Stores an uploaded image for its owner, or says why it can't. */
+export async function storeImage(c: Context<UserEnv>, owner: Owner, file: File) {
+  if (!isImageType(file.type)) {
+    return c.json({ error: `Send one of ${IMAGE_TYPES.join(", ")}` } satisfies ApiError, 415)
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    return c.json(
+      { error: `The image is over ${MAX_IMAGE_BYTES / 1_000_000} MB` } satisfies ApiError,
+      413,
+    )
+  }
+  const db = c.get("db")
+  const id = crypto.randomUUID()
+  const content = new Uint8Array(await file.arrayBuffer())
+  const insert = db.insert(image).values({ id, content, mimeType: file.type, ...owner })
+  if ("ingredientId" in owner) {
+    // An ingredient has one photo: the new one replaces the old, or nothing changes.
+    await db.batch([db.delete(image).where(eq(image.ingredientId, owner.ingredientId)), insert])
+  } else {
+    await insert
+  }
+  return c.json({ id }, 201)
+}
+
+export default new Hono<UserEnv>()
+  .use(requireUser)
+  .get("/:id", async (c) => {
+    const [row] = await c
+      .get("db")
+      .select({
+        content: image.content,
+        mimeType: image.mimeType,
+        ingredientId: image.ingredientId,
+        owner: recipe.userId,
+      })
+      .from(image)
+      .leftJoin(recipe, eq(recipe.id, image.recipeId))
+      .where(eq(image.id, c.req.param("id")))
+
+    // A recipe's images are private to its owner. An ingredient's photo is shared.
+    if (!row || (row.ingredientId === null && row.owner !== c.get("user").id)) {
+      return c.json({ error: "Image not found" } satisfies ApiError, 404)
+    }
+    // The id changes whenever the bytes do, so a browser can keep it for good.
+    return c.body(row.content, 200, {
+      "Content-Type": row.mimeType,
+      "Cache-Control": "private, max-age=31536000, immutable",
+      "X-Content-Type-Options": "nosniff",
+    })
+  })
+  // Only a recipe's own images. An ingredient's photo is replaced, never deleted.
+  .delete("/:id", async (c) => {
+    const db = c.get("db")
+    const mine = db
+      .select({ id: recipe.id })
+      .from(recipe)
+      .where(eq(recipe.userId, c.get("user").id))
+    const deleted = await db
+      .delete(image)
+      .where(and(eq(image.id, c.req.param("id")), inArray(image.recipeId, mine)))
+      .returning({ id: image.id })
+    return deleted.length > 0
+      ? c.body(null, 204)
+      : c.json({ error: "Image not found" } satisfies ApiError, 404)
+  })

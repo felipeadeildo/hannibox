@@ -3,12 +3,19 @@ import { Hono } from "hono"
 import type { ApplyGlobalResponse } from "hono/client"
 
 import { withAuth } from "./auth"
+import { withDb } from "./db"
 import type { Env } from "./env"
 import greetings from "./routes/greetings"
+import images from "./routes/images"
+import ingredients from "./routes/ingredients"
+import recipes from "./routes/recipes"
 
 const api = new Hono<Env>()
   .get("/health", (c) => c.json({ ok: true }, 200))
   .route("/greetings", greetings)
+  .route("/recipes", recipes)
+  .route("/ingredients", ingredients)
+  .route("/images", images)
 
 const app = new Hono<Env>()
 
@@ -19,7 +26,7 @@ app.all("/assets/*", async (c) => {
   return isShell ? c.body(null, 404) : asset
 })
 
-app.use("/api/*", withAuth)
+app.use("/api/*", withDb, withAuth)
 app.on(["GET", "POST"], "/api/auth/*", (c) => c.get("auth").handler(c.req.raw))
 app.route("/api", api)
 

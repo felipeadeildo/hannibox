@@ -1,14 +1,12 @@
 import type { ApiError } from "@hannibox/shared"
 import { createAuth } from "@hannibox/auth"
-import { schema } from "@hannibox/db"
-import { drizzle } from "drizzle-orm/d1"
 import { createMiddleware } from "hono/factory"
 
 import type { Env, UserEnv } from "./env"
 
 export const withAuth = createMiddleware<Env>(async (c, next) => {
   const auth = createAuth({
-    db: drizzle(c.env.DB, { schema }),
+    db: c.get("db"),
     secret: c.env.BETTER_AUTH_SECRET,
     baseURL: new URL(c.req.url).origin,
   })
