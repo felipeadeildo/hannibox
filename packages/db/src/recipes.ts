@@ -23,7 +23,7 @@ const timestamp = (name: string) =>
     .notNull()
 
 // D1 hands a BLOB back as a plain array of byte values, so normalize it to bytes.
-const bytes = customType<{ data: Uint8Array; driverData: Uint8Array | number[] }>({
+const bytes = customType<{ data: Uint8Array<ArrayBuffer>; driverData: Uint8Array | number[] }>({
   dataType: () => "blob",
   fromDriver: (value) => Uint8Array.from(value),
 })
@@ -63,7 +63,7 @@ export const ingredient = sqliteTable("ingredient", {
   name: text("name").notNull().unique(),
 })
 
-// A null unit counts things: "2 eggs".
+// A null unit counts things: "2 eggs". `position` is the order the list is written in.
 export const recipeIngredient = sqliteTable(
   "recipe_ingredient",
   {
@@ -75,6 +75,7 @@ export const recipeIngredient = sqliteTable(
       .references(() => ingredient.id, { onDelete: "restrict" }),
     quantity: real("quantity").notNull(),
     unit: text("unit", { enum: UNITS }),
+    position: integer("position").notNull().default(0),
   },
   (table) => [
     primaryKey({ columns: [table.recipeId, table.ingredientId] }),

@@ -15,6 +15,13 @@
       "when": 1791149943633,
       "tag": "0001_recipes",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791150505629,
+      "tag": "0002_ingredient_position",
+      "breakpoints": true
     }
   ]
 }
