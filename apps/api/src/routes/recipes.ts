@@ -8,15 +8,15 @@ import {
   type IngredientLine,
   type Unit,
 } from "@hannibox/shared"
-import { and, count, desc, eq, isNull, sql } from "drizzle-orm"
+import { and, count, desc, eq, isNull, notInArray, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import type { Context } from "hono"
 
 import { requireUser } from "../auth"
 import { contains } from "../db"
 import type { Db, UserEnv } from "../env"
+import { SaveForm, readSave } from "../save"
 import { validate } from "../validate"
-import { ImageUpload, storeImage } from "./images"
 
 const { image, ingredient, recipe, recipeIngredient } = schema
 
@@ -63,6 +63,25 @@ async function loadRecipe(db: Db, userId: string, id: string) {
     })),
   }
 }
+
+/**
+ * The new photos of a save, as inserts owned by the recipe the save wrote. Only reading the bytes
+ * waits: a query builder is thenable, so returning one from an async function would run it.
+ */
+async function writePhotos(db: Db, recipeId: string, photos: File[]) {
+  const bytes = await Promise.all(photos.map((file) => file.arrayBuffer()))
+  return photos.map((file, index) =>
+    db.insert(image).values({
+      id: crypto.randomUUID(),
+      content: new Uint8Array(bytes[index] ?? new ArrayBuffer(0)),
+      mimeType: file.type,
+      recipeId,
+    }),
+  )
+}
+
+const refused = (c: Context<UserEnv>, save: { status: 400 | 413 | 415; error: string }) =>
+  c.json({ error: save.error } satisfies ApiError, save.status)
 
 // Writes the lines in two statements however long the list is. D1 takes 100 bound parameters
 // per query and 50 queries per invocation on the free plan, so each list travels as one JSON
@@ -119,6 +138,20 @@ export default new Hono<UserEnv>()
           parentId: recipe.parentId,
           createdAt: recipe.createdAt,
           updatedAt: recipe.updatedAt,
+          // What a row of the list shows: how much is in it, what grew from it, and its first photo.
+          // The outer table is named in full: in a one-table select Drizzle writes `${recipe.id}`
+          // as a bare "id", which inside these subqueries would mean their own id.
+          ingredients:
+            sql<number>`(select count(*) from recipe_ingredient where recipe_ingredient.recipe_id = recipe.id)`.mapWith(
+              Number,
+            ),
+          versions:
+            sql<number>`(select count(*) from recipe as child where child.parent_id = recipe.id)`.mapWith(
+              Number,
+            ),
+          cover: sql<
+            string | null
+          >`(select image.id from image where image.recipe_id = recipe.id limit 1)`,
         })
         .from(recipe)
         .where(where)
@@ -128,25 +161,30 @@ export default new Hono<UserEnv>()
       db.select({ total: count() }).from(recipe).where(where),
     ])
     const total = must(counted).total
-    return c.json({ items, page, pageSize, total, pages: Math.ceil(total / pageSize) })
+    return c.json({ items, page, pageSize, total, pages: Math.ceil(total / pageSize) }, 200)
   })
-  .post("/", validate("json", CreateRecipe), async (c) => {
-    const { ingredients = [], ...fields } = c.req.valid("json")
+  .post("/", validate("form", SaveForm), async (c) => {
+    const save = readSave(CreateRecipe, c.req.valid("form"))
+    if (!save.ok) return refused(c, save)
+    const { ingredients = [], ...fields } = save.data
     const db = c.get("db")
     const userId = c.get("user").id
     const id = crypto.randomUUID()
     await db.batch([
       db.insert(recipe).values({ id, userId, ...fields }),
       ...writeIngredients(db, id, ingredients),
+      ...(await writePhotos(db, id, save.photos)),
     ])
     return c.json(must(await loadRecipe(db, userId, id)), 201)
   })
   .get("/:id", async (c) => {
     const found = await loadRecipe(c.get("db"), c.get("user").id, c.req.param("id"))
-    return found ? c.json(found) : notFound(c)
+    return found ? c.json(found, 200) : notFound(c)
   })
-  .patch("/:id", validate("json", UpdateRecipe), async (c) => {
-    const { ingredients, ...fields } = c.req.valid("json")
+  .patch("/:id", validate("form", SaveForm), async (c) => {
+    const save = readSave(UpdateRecipe, c.req.valid("form"))
+    if (!save.ok) return refused(c, save)
+    const { ingredients, images, ...fields } = save.data
     const db = c.get("db")
     const userId = c.get("user").id
     const id = c.req.param("id")
@@ -158,14 +196,28 @@ export default new Hono<UserEnv>()
         .update(recipe)
         .set({ ...fields, updatedAt: new Date() })
         .where(eq(recipe.id, id)),
+      // The photos named stay, and this recipe's others are deleted. None named deletes them all.
+      ...(images
+        ? [
+            db
+              .delete(image)
+              .where(
+                and(
+                  eq(image.recipeId, id),
+                  images.length > 0 ? notInArray(image.id, images) : undefined,
+                ),
+              ),
+          ]
+        : []),
       ...(ingredients
         ? [
             db.delete(recipeIngredient).where(eq(recipeIngredient.recipeId, id)),
             ...writeIngredients(db, id, ingredients),
           ]
         : []),
+      ...(await writePhotos(db, id, save.photos)),
     ])
-    return c.json(must(await loadRecipe(db, userId, id)))
+    return c.json(must(await loadRecipe(db, userId, id)), 200)
   })
   // Deleting a recipe takes it out of the tree: its variations move up to its parent.
   .delete("/:id", async (c) => {
@@ -220,30 +272,36 @@ export default new Hono<UserEnv>()
       updatedAt: new Date(row.updatedAt),
     }))
     const root = nodes.find((node) => node.parentId === null)
-    return root ? c.json({ rootId: root.id, currentId: id, nodes }) : notFound(c)
+    return root ? c.json({ rootId: root.id, currentId: id, nodes }, 200) : notFound(c)
   })
-  // A copy of the recipe, its ingredients and its images, linked below it in the tree.
-  .post("/:id/variations", validate("json", CreateVariation), async (c) => {
+  // A copy of the recipe, its ingredients and its photos, linked below it in the tree.
+  // The form can change any field of the copy, name the photos to bring along and add new ones,
+  // so saving an edited draft is one request.
+  .post("/:id/variations", validate("form", SaveForm), async (c) => {
+    const save = readSave(CreateVariation, c.req.valid("form"))
+    if (!save.ok) return refused(c, save)
+    const { ingredients, images, ...changes } = save.data
     const db = c.get("db")
     const userId = c.get("user").id
     const from = await loadRecipe(db, userId, c.req.param("id"))
     if (!from) return notFound(c)
 
     const id = crypto.randomUUID()
-    // The copy gets its own images and its content points at them, so deleting the
-    // original later cannot break it.
-    const copies = from.images.map((old) => ({ from: old.id, to: crypto.randomUUID() }))
-    const content = copies.reduce((text, copy) => text.replaceAll(copy.from, copy.to), from.content)
+    // The copy gets its own photos, so deleting the original later cannot take them away.
+    // Only the ones named are copied; the original keeps all of its own either way.
+    const copies = from.images
+      .filter((photo) => images === undefined || images.includes(photo.id))
+      .map((photo) => ({ from: photo.id, to: crypto.randomUUID() }))
     await db.batch([
       db.insert(recipe).values({
         id,
         userId,
         parentId: from.id,
-        title: c.req.valid("json").title ?? from.title,
-        source: from.source,
-        content,
-        yield: from.yield,
-        yieldUnit: from.yieldUnit,
+        title: changes.title ?? from.title,
+        source: changes.source === undefined ? from.source : changes.source,
+        content: changes.content ?? from.content,
+        yield: changes.yield === undefined ? from.yield : changes.yield,
+        yieldUnit: changes.yieldUnit === undefined ? from.yieldUnit : changes.yieldUnit,
       }),
       db.insert(image).select(
         db
@@ -257,12 +315,8 @@ export default new Hono<UserEnv>()
           .from(sql`json_each(${JSON.stringify(copies)}) as j`)
           .innerJoin(image, sql`${image.id} = j.value ->> 'from'`),
       ),
-      ...writeIngredients(db, id, from.ingredients),
+      ...writeIngredients(db, id, ingredients ?? from.ingredients),
+      ...(await writePhotos(db, id, save.photos)),
     ])
     return c.json(must(await loadRecipe(db, userId, id)), 201)
-  })
-  .post("/:id/images", validate("form", ImageUpload), async (c) => {
-    const id = c.req.param("id")
-    if (!(await owns(c.get("db"), c.get("user").id, id))) return notFound(c)
-    return storeImage(c, { recipeId: id }, c.req.valid("form").file)
   })

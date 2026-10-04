@@ -22,9 +22,10 @@ export default new Hono<UserEnv>()
       limit: 20,
       with: { images: { columns: { id: true }, limit: 1 } },
     })
-    return c.json({
-      items: rows.map(({ id, name, images }) => ({ id, name, imageId: images[0]?.id ?? null })),
-    })
+    return c.json(
+      { items: rows.map(({ id, name, images }) => ({ id, name, imageId: images[0]?.id ?? null })) },
+      200,
+    )
   })
   // The catalog is shared, so an ingredient has one photo and anyone can replace it.
   .put("/:id/image", validate("form", ImageUpload), async (c) => {

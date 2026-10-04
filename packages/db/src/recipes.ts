@@ -43,7 +43,7 @@ export const recipe = sqliteTable(
     }),
     title: text("title").notNull(),
     source: text("source"),
-    // Markdown: the steps, with images by URL.
+    // The steps, in plain text for now.
     content: text("content").notNull().default(""),
     yield: real("yield"),
     yieldUnit: text("yield_unit", { enum: UNITS }),

@@ -33,20 +33,20 @@ After changing the auth config or the schema, run `bun run db:generate`. It rege
 
 Every route needs a session. A failure is always `{ "error": "..." }`: 400 when the body or the query fails validation, 401 without a session, 404 for what does not exist or belongs to someone else, 413 and 415 for a bad image.
 
-| Route                                       | What it does                                                                                                                 |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/recipes?q&original&page&pageSize` | The user's recipes, last edited first: `{ items, page, pageSize, total, pages }`. `original=true` leaves out the variations. |
-| `POST /api/recipes`                         | Creates one. Only `title` is required. `ingredients` is the whole list, in order.                                            |
-| `GET /api/recipes/:id`                      | The recipe, its ingredient lines with their photo, and the ids of its images.                                                |
-| `PATCH /api/recipes/:id`                    | Any subset of the fields. Sending `ingredients` replaces the list.                                                           |
-| `DELETE /api/recipes/:id`                   | Takes it out of the tree: its variations move up to its parent.                                                              |
-| `GET /api/recipes/:id/tree`                 | `{ rootId, currentId, nodes }`: every recipe of the tree as a flat list of `{ id, parentId, title, createdAt, updatedAt }`.  |
-| `POST /api/recipes/:id/variations`          | A copy, with its ingredients and images, linked under it. Takes an optional `title`.                                         |
-| `POST /api/recipes/:id/images`              | Multipart `file`.                                                                                                            |
-| `GET /api/ingredients?q`                    | For autocomplete: the first 20 names that contain `q`.                                                                       |
-| `PUT /api/ingredients/:id/image`            | Multipart `file`. Replaces the ingredient's photo.                                                                           |
-| `GET /api/images/:id`                       | The bytes, cached for good because an id never changes its bytes.                                                            |
-| `DELETE /api/images/:id`                    | A recipe's image. Ingredient photos are replaced, never deleted.                                                             |
+| Route                                       | What it does                                                                                                                                                                                                     |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/recipes?q&original&page&pageSize` | The user's recipes, last edited first: `{ items, page, pageSize, total, pages }`. Each item carries its `ingredients` and `versions` counts and the `cover` image id. `original=true` leaves out the variations. |
+| `POST /api/recipes`                         | Creates one. Only `title` is required. `ingredients` is the whole list, in order. A save is a form (see below).                                                                                                  |
+| `GET /api/recipes/:id`                      | The recipe, its ingredient lines with their photo, and the ids of its images.                                                                                                                                    |
+| `PATCH /api/recipes/:id`                    | Any subset of the fields. `ingredients` replaces the list, and `images` (the ids to keep) deletes the other photos. A save is a form.                                                                            |
+| `DELETE /api/recipes/:id`                   | Takes it out of the tree: its variations move up to its parent.                                                                                                                                                  |
+| `GET /api/recipes/:id/tree`                 | `{ rootId, currentId, nodes }`: every recipe of the tree as a flat list of `{ id, parentId, title, createdAt, updatedAt }`.                                                                                      |
+| `POST /api/recipes/:id/variations`          | A copy, with its ingredients and photos, linked under it. A field replaces the copied one, and `images` names the photos to bring along (all, if left out). A save is a form.                                    |
+| `GET /api/ingredients?q`                    | For autocomplete: the first 20 names that contain `q`.                                                                                                                                                           |
+| `PUT /api/ingredients/:id/image`            | Multipart `file`. Replaces the ingredient's photo.                                                                                                                                                               |
+| `GET /api/images/:id`                       | The bytes, cached for good because an id never changes its bytes.                                                                                                                                                |
+
+A save (create, patch, variation) is a `multipart/form-data` request: the recipe fields as JSON in `data`, and the photos to add as files named `photos`. They travel together so the recipe and its photos are written, or refused, as one. A photo belongs to no recipe until a save puts it on one, and that is the only way a recipe's photos change, so the web app keeps the photos of a draft on the device (IndexedDB) and sends them when the draft is saved: a new version gets its own, and the version it came from is never touched.
 
 An ingredient line is `{ name, quantity, unit }`. A new name creates the ingredient, so a client never creates one on its own. Images are PNG, JPEG, WebP or GIF, up to `MAX_IMAGE_BYTES` in `packages/shared`.
 

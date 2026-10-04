@@ -28,7 +28,7 @@ const Ingredients = z
     error: "Each ingredient can appear only once",
   })
 
-const Recipe = z.object({
+const Fields = z.object({
   title: z.string().trim().min(1).max(200),
   source: z.string().trim().max(2000).nullable(),
   content: z.string().max(100_000),
@@ -38,16 +38,17 @@ const Recipe = z.object({
   ingredients: Ingredients,
 })
 
-export const CreateRecipe = Recipe.partial().required({ title: true })
+/** The ids of the photos that stay. Sent, the others go; left out, they all stay. */
+const Photos = z.array(z.string()).max(100)
 
-export const UpdateRecipe = Recipe.partial().refine((fields) => Object.keys(fields).length > 0, {
-  error: "Send at least one field",
-})
+export const CreateRecipe = Fields.partial().required({ title: true })
 
-export const CreateVariation = z.object({
-  /** Defaults to the title of the recipe it comes from. */
-  title: Recipe.shape.title.optional(),
-})
+export const UpdateRecipe = Fields.extend({ images: Photos })
+  .partial()
+  .refine((fields) => Object.keys(fields).length > 0, { error: "Send at least one field" })
+
+/** A copy of a recipe. Whatever is sent replaces the copied value; the rest stays as it was. */
+export const CreateVariation = Fields.extend({ images: Photos }).partial()
 
 export const ListRecipes = z.object({
   q: z.string().trim().max(100).optional(),
