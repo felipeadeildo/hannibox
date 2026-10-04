@@ -1,0 +1,16 @@
+# Personal overrides go in lefthook-local.yml, which git ignores.
+pre-commit:
+  jobs:
+    - name: lint
+      glob: "*.{js,jsx,ts,tsx,mjs,cjs}"
+      run: bunx oxlint --fix {staged_files}
+      stage_fixed: true
+
+    - name: format
+      run: bunx oxfmt --no-error-on-unmatched-pattern {staged_files}
+      stage_fixed: true
+
+pre-push:
+  jobs:
+    - name: typecheck
+      run: bun run typecheck

@@ -1,0 +1,38 @@
+{
+  "name": "hannibox",
+  "private": true,
+  "workspaces": {
+    "packages": [
+      "apps/*",
+      "packages/*"
+    ],
+    "catalog": {
+      "@types/react": "^19",
+      "@types/react-dom": "^19",
+      "hono": "^4.13.13",
+      "react": "^19.2.8",
+      "react-dom": "^19.2.8",
+      "typescript": "^6.0.2",
+      "zod": "^4.6.5"
+    }
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "bun --filter './apps/*' dev",
+    "build": "bun run --filter @hannibox/web build && bun run --filter @hannibox/api build",
+    "preview": "bun run --filter @hannibox/web build && bun run --filter @hannibox/api dev",
+    "deploy": "bun run --filter @hannibox/web build && bun run --filter @hannibox/api deploy",
+    "typecheck": "bun --filter '*' typecheck",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "verify": "bun run typecheck && bun run lint && bun run fmt:check"
+  },
+  "devDependencies": {
+    "lefthook": "^2.1.16",
+    "oxfmt": "^0.71.0",
+    "oxlint": "^1.86.0",
+    "oxlint-tsgolint": "^7.0.2003"
+  }
+}

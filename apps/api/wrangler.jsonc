@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hannibox",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "upload_source_maps": true,
+  "observability": { "enabled": true },
+  "assets": {
+    "directory": "../web/build/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    // `/api/*` always reaches the Worker, even from the address bar.
+    // `/assets/*` does too, so a chunk removed by a deploy gets a 404.
+    "run_worker_first": ["/api/*", "/assets/*"],
+  },
+}

@@ -1,0 +1,36 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "import", "react"],
+  "categories": {
+    "correctness": "error"
+  },
+  "options": {
+    "typeAware": true,
+    "typeCheck": true
+  },
+  "ignorePatterns": [
+    "**/build/**",
+    "**/dist/**",
+    "**/.react-router/**",
+    "**/worker-configuration.d.ts"
+  ],
+  "overrides": [
+    {
+      "files": ["apps/web/app/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@hannibox/api", "@hannibox/api/**"],
+                "allowTypeImports": true,
+                "message": "The SPA imports the API only as types, through ~/lib/api."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

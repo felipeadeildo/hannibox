@@ -1,0 +1,9 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "semi": false,
+  "sortTailwindcss": {
+    "stylesheet": "./apps/web/app/app.css",
+    "functions": ["cn", "cva"]
+  },
+  "ignorePatterns": ["**/worker-configuration.d.ts"]
+}

@@ -1,0 +1,24 @@
+# dependencies
+node_modules
+
+# output
+build
+dist
+.react-router
+*.tsbuildinfo
+
+# env and Worker secrets
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
+# wrangler local state
+.wrangler
+
+.DS_Store
+
+# personal lefthook overrides
+lefthook-local.yml
