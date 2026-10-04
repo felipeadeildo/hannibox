@@ -1,0 +1,52 @@
+import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query"
+
+/** A reply the API refused. `message` is the `{ error }` it sent. */
+export class ApiFailure extends Error {
+  readonly status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.status = status
+  }
+}
+
+// A session that ended while the tab stayed open sends the user back to sign in.
+function onError(error: Error) {
+  if (error instanceof ApiFailure && error.status === 401) window.location.assign("/auth")
+}
+
+export const queryClient = new QueryClient({
+  queryCache: new QueryCache({ onError }),
+  mutationCache: new MutationCache({ onError }),
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      // A 4xx will answer the same again. Only a flaky network or a 5xx is worth retrying.
+      retry: (count, error) => !(error instanceof ApiFailure && error.status < 500) && count < 2,
+    },
+  },
+})
+
+type Reply = { ok: boolean; status: number; json(): Promise<unknown> }
+
+async function failure(res: Reply) {
+  const body = await res.json().catch(() => null)
+  const message =
+    typeof body === "object" && body !== null && "error" in body && typeof body.error === "string"
+      ? body.error
+      : "Something went wrong"
+  return new ApiFailure(res.status, message)
+}
+
+/** The body of a successful reply. Anything else throws an `ApiFailure`. */
+export async function unwrap<R extends Reply>(
+  res: R,
+): Promise<Awaited<ReturnType<Extract<R, { ok: true }>["json"]>>> {
+  if (!res.ok) throw await failure(res)
+  return (await res.json()) as never
+}
+
+/** For replies with no body, like a 204. */
+export async function expectOk(res: Reply) {
+  if (!res.ok) throw await failure(res)
+}
