@@ -27,7 +27,7 @@ In the SPA, `/auth` signs in, signs up and signs out, each through its `clientAc
 
 ## Database
 
-After changing the auth config or the schema, run `bun run db:generate`. It regenerates `packages/db/src/schema.ts` from the Better Auth config, then writes a migration to `packages/db/migrations`. Commit both. `bun run dev` applies it locally, and the deploy applies it to the remote D1 before publishing.
+After changing the auth config or the schema, run `bun run db:generate`. It regenerates `packages/db/src/auth.ts` from the Better Auth config, then writes a migration to `packages/db/migrations`. The recipe tables are in `packages/db/src/recipes.ts`, written by hand, and `schema.ts` joins the two. Commit both. `bun run dev` applies it locally, and the deploy applies it to the remote D1 before publishing.
 
 ## Checks
 

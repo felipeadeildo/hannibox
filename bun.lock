@@ -78,6 +78,7 @@
     "packages/db": {
       "name": "@hannibox/db",
       "dependencies": {
+        "@hannibox/shared": "workspace:*",
         "drizzle-orm": "catalog:",
       },
       "devDependencies": {

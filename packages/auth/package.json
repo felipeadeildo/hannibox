@@ -6,7 +6,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "schema": "auth generate --config cli.ts --adapter drizzle --dialect sqlite --output ../db/src/schema.ts --yes",
+    "schema": "auth generate --config cli.ts --adapter drizzle --dialect sqlite --output ../db/src/auth.ts --yes",
     "typecheck": "tsc"
   },
   "dependencies": {
