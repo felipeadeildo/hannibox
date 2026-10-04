@@ -1,0 +1,4 @@
+# Copy to .dev.vars for `wrangler dev`. Deployed, set the secret on the Worker instead.
+NODE_ENV=development
+# openssl rand -base64 32
+BETTER_AUTH_SECRET=

@@ -21,6 +21,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
   )
 }
 
+// The SPA shell renders this until the first route's clientLoader resolves.
+export function HydrateFallback() {
+  return null
+}
+
 export default function App() {
   return <Outlet />
 }

@@ -1,0 +1,22 @@
+{
+  "name": "@hannibox/auth",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "schema": "auth generate --config cli.ts --adapter drizzle --dialect sqlite --output ../db/src/schema.ts --yes",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@better-auth/drizzle-adapter": "^1.7.7",
+    "@hannibox/db": "workspace:*",
+    "better-auth": "catalog:"
+  },
+  "devDependencies": {
+    "auth": "^1.7.7",
+    "drizzle-orm": "catalog:",
+    "typescript": "catalog:"
+  }
+}

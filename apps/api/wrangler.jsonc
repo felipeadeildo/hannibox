@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "hannibox",
+  "account_id": "720f5ebff7bf7b70529f7fba3b517f38",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   "upload_source_maps": true,
@@ -13,4 +14,15 @@
     // `/assets/*` does too, so a chunk removed by a deploy gets a 404.
     "run_worker_first": ["/api/*", "/assets/*"],
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "hannibox",
+      "database_id": "ee7f2e5e-2170-4bd6-b61a-701ca9fc013b",
+      "migrations_dir": "../../packages/db/migrations",
+    },
+  ],
+  // Better Auth reads `NODE_ENV` for secure cookies and rate limits. `.dev.vars` overrides it.
+  "vars": { "NODE_ENV": "production" },
+  "secrets": { "required": ["BETTER_AUTH_SECRET"] },
 }

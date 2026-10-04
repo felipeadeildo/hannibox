@@ -9,6 +9,8 @@
     "catalog": {
       "@types/react": "^19",
       "@types/react-dom": "^19",
+      "better-auth": "^1.7.7",
+      "drizzle-orm": "^0.45.3",
       "hono": "^4.13.13",
       "react": "^19.2.8",
       "react-dom": "^19.2.8",
@@ -22,6 +24,7 @@
     "build": "bun run --filter @hannibox/web build && bun run --filter @hannibox/api build",
     "preview": "bun run --filter @hannibox/web build && bun run --filter @hannibox/api dev",
     "deploy": "bun run --filter @hannibox/web build && bun run --filter @hannibox/api deploy",
+    "db:generate": "bun run --filter @hannibox/auth schema && bun run --filter @hannibox/db generate",
     "typecheck": "bun --filter '*' typecheck",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
