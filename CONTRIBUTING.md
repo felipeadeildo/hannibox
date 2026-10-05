@@ -48,7 +48,7 @@ Every route needs a session. A failure is always `{ "error": "..." }`: 400 when 
 
 A save (create, patch, variation) is a `multipart/form-data` request: the recipe fields as JSON in `data`, and the photos to add as files named `photos`. They travel together so the recipe and its photos are written, or refused, as one. A photo belongs to no recipe until a save puts it on one, and that is the only way a recipe's photos change, so the web app keeps the photos of a draft on the device (IndexedDB) and sends them when the draft is saved: a new version gets its own, and the version it came from is never touched.
 
-An ingredient line is `{ name, quantity, unit }`. A new name creates the ingredient, so a client never creates one on its own. Images are PNG, JPEG, WebP or GIF, up to `MAX_IMAGE_BYTES` in `packages/shared`.
+An ingredient line is `{ name, quantity, unit }`. A new name creates the ingredient, so a client never creates one on its own. Images are PNG, JPEG, WebP or GIF, up to `MAX_IMAGE_BYTES` in `packages/shared`. The API reads the type from the file's first bytes and ignores the one the upload declares, because `/api/images/:id` serves what it stored with `nosniff`.
 
 A write that touches several tables goes in one `db.batch`, which D1 runs as a transaction. A list of ingredient lines travels as one JSON that `json_each` unfolds, because D1 takes 100 bound parameters per query and 50 queries per invocation on the free plan.
 

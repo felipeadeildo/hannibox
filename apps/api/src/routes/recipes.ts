@@ -15,6 +15,7 @@ import type { Context } from "hono"
 import { requireUser } from "../auth"
 import { contains } from "../db"
 import type { Db, UserEnv } from "../env"
+import type { Photo } from "../photos"
 import { SaveForm, readSave } from "../save"
 import { validate } from "../validate"
 
@@ -72,18 +73,12 @@ async function loadRecipe(db: Db, userId: string, id: string) {
 }
 
 /**
- * A query builder is thenable, so returning one from an async function would run it. Only reading
- * the bytes is awaited.
+ * The inserts for a save's new photos, for the caller to put in its batch. Not async on purpose: a
+ * query builder is thenable, so returning one from an async function would run it.
  */
-async function writePhotos(db: Db, recipeId: string, photos: File[]) {
-  const bytes = await Promise.all(photos.map((file) => file.arrayBuffer()))
-  return photos.map((file, index) =>
-    db.insert(image).values({
-      id: crypto.randomUUID(),
-      content: new Uint8Array(bytes[index] ?? new ArrayBuffer(0)),
-      mimeType: file.type,
-      recipeId,
-    }),
+function writePhotos(db: Db, recipeId: string, photos: Photo[]) {
+  return photos.map((photo) =>
+    db.insert(image).values({ id: crypto.randomUUID(), ...photo, recipeId }),
   )
 }
 
@@ -183,7 +178,7 @@ export default new Hono<UserEnv>()
     return c.json({ items, nextCursor, total: must(counted).total }, 200)
   })
   .post("/", validate("form", SaveForm), async (c) => {
-    const save = readSave(CreateRecipe, c.req.valid("form"))
+    const save = await readSave(CreateRecipe, c.req.valid("form"))
     if (!save.ok) return refused(c, save)
     const { ingredients = [], ...fields } = save.data
     const db = c.get("db")
@@ -192,7 +187,7 @@ export default new Hono<UserEnv>()
     await db.batch([
       db.insert(recipe).values({ id, userId, ...fields }),
       ...writeIngredients(db, id, ingredients),
-      ...(await writePhotos(db, id, save.photos)),
+      ...writePhotos(db, id, save.photos),
     ])
     return c.json(must(await loadRecipe(db, userId, id)), 201)
   })
@@ -201,7 +196,7 @@ export default new Hono<UserEnv>()
     return found ? c.json(found, 200) : notFound(c)
   })
   .patch("/:id", validate("form", SaveForm), async (c) => {
-    const save = readSave(UpdateRecipe, c.req.valid("form"))
+    const save = await readSave(UpdateRecipe, c.req.valid("form"))
     if (!save.ok) return refused(c, save)
     const { ingredients, images, ...fields } = save.data
     const db = c.get("db")
@@ -234,7 +229,7 @@ export default new Hono<UserEnv>()
             ...writeIngredients(db, id, ingredients),
           ]
         : []),
-      ...(await writePhotos(db, id, save.photos)),
+      ...writePhotos(db, id, save.photos),
     ])
     return c.json(must(await loadRecipe(db, userId, id)), 200)
   })
@@ -292,7 +287,7 @@ export default new Hono<UserEnv>()
     return root ? c.json({ rootId: root.id, currentId: id, nodes }, 200) : notFound(c)
   })
   .post("/:id/variations", validate("form", SaveForm), async (c) => {
-    const save = readSave(CreateVariation, c.req.valid("form"))
+    const save = await readSave(CreateVariation, c.req.valid("form"))
     if (!save.ok) return refused(c, save)
     const { ingredients, images, ...changes } = save.data
     const db = c.get("db")
@@ -329,7 +324,7 @@ export default new Hono<UserEnv>()
           .innerJoin(image, sql`${image.id} = j.value ->> 'from'`),
       ),
       ...writeIngredients(db, id, ingredients ?? from.ingredients),
-      ...(await writePhotos(db, id, save.photos)),
+      ...writePhotos(db, id, save.photos),
     ])
     return c.json(must(await loadRecipe(db, userId, id)), 201)
   })
