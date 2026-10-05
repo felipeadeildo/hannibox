@@ -6,6 +6,8 @@ import { useMemo, useState } from "react"
 import { Link } from "react-router"
 
 import { DraftPill } from "~/components/app/draft-pill"
+import { RecipeText } from "~/components/recipe/recipe-text"
+import { writeSteps } from "~/components/recipe/steps"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "~/components/ui/hover-card"
 import { ScrollArea } from "~/components/ui/scroll-area"
 import {
@@ -89,7 +91,7 @@ export function TreeSheet({
               onOpen={() => onOpenChange(false)}
               onStartEditing={() => {
                 onOpenChange(false)
-                setTimeout(() => document.getElementById("recipe-content")?.focus(), 250)
+                setTimeout(writeSteps, 250)
               }}
             />
           ) : (
@@ -353,7 +355,7 @@ function Preview({ id, enabled }: { id: string; enabled: boolean }) {
           {ingredients.length > 5 && ` and ${ingredients.length - 5} more`}
         </p>
       )}
-      {content && <p className="line-clamp-3 text-muted-foreground">{content}</p>}
+      {content && <RecipeText source={content} compact />}
     </div>
   )
 }
