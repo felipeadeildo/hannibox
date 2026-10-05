@@ -230,7 +230,7 @@ export function RecipeList({ activeId }: { activeId?: string }) {
 
   return (
     <>
-      <div className="flex flex-col gap-3 p-3 pb-2">
+      <div className="flex flex-col gap-3 p-3 pb-1">
         <div className="flex items-center gap-2">
           <InputGroup className="h-10 flex-1 bg-background md:h-9">
             <InputGroupAddon>
@@ -293,7 +293,8 @@ export function RecipeList({ activeId }: { activeId?: string }) {
         fade="y"
         viewportRef={setViewport}
         className="min-h-0 flex-1"
-        viewportClassName="px-2 pb-24 md:pb-2"
+        // Room above the first row, or the scroll edge cuts the top of its ring.
+        viewportClassName="px-2 pt-1 pb-24 md:pb-2"
       >
         {unsaved.length > 0 && (
           <ul className="mb-2 flex flex-col gap-0.5">
