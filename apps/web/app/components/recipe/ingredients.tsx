@@ -133,6 +133,7 @@ export function Ingredients({
   const [naming, setNaming] = useState<string | null>(null)
   const [text, setText] = useState("")
   const [focusAdd, setFocusAdd] = useState(false)
+  const [fresh, setFresh] = useState<string>()
   const onFocused = useCallback(() => setFocusAdd(false), [])
 
   // While a line is dragged, the lines stay here, so it can pass through other sections without
@@ -374,7 +375,10 @@ export function Ingredients({
       scale={scale}
       autoFocus={focusAdd}
       onFocused={onFocused}
-      onAdd={(line) => onEdit((current) => addLine(current, target?.key, line))}
+      onAdd={(line) => {
+        onEdit((current) => addLine(current, target?.key, line))
+        setFresh(lineId(target?.key ?? "", line.name))
+      }}
       onSection={(title) => startSection(title)}
       onSplit={(line) => startSection(placeholderTitle(sections), [line], true)}
     />
@@ -433,6 +437,7 @@ export function Ingredients({
                         (part) => part.key !== section.key,
                       )}
                       canSplit={at > 0 && sections.length < LIMITS.sections}
+                      fresh={row.id === fresh}
                       refusedAt={refused?.id === row.id ? refused.at : undefined}
                       onSave={(next, to) => saveLine(section.key, row.line.name, next, to)}
                       onSplit={() => splitAt(section.key, at)}

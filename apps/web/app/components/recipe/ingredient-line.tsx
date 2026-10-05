@@ -39,6 +39,7 @@ export function Line({
   places,
   elsewhere,
   canSplit,
+  fresh = false,
   refusedAt,
   onSave,
   onSplit,
@@ -56,6 +57,8 @@ export function Line({
   elsewhere: Part[]
   /** Whether a new section can start at this line. */
   canSplit: boolean
+  /** Just added: the line comes into view, which a capped list would otherwise hide. */
+  fresh?: boolean
   /** When the line was last dropped on a section that has it. Each time, it shakes. */
   refusedAt?: number
   /** Keeps the line as changed, moved to the section `to` when that is another one. */
@@ -74,6 +77,10 @@ export function Line({
   } = useSortable({ id, data: { type: "line" } })
   const [open, setOpen] = useState(false)
   const item = useRef<HTMLLIElement | null>(null)
+
+  useEffect(() => {
+    if (fresh) item.current?.scrollIntoView({ block: "nearest" })
+  }, [fresh])
 
   // Shakes the line where it stayed. It moves `translate`, not `transform`, which the drag sets.
   useEffect(() => {
