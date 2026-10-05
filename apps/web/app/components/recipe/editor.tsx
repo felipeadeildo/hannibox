@@ -464,8 +464,9 @@ function Header({
   const versions = tree?.nodes.length ?? 0
 
   return (
-    <header className="flex flex-col gap-5">
-      {/* Stays at the top on a phone, so the way back and the versions are always under the thumb. */}
+    <>
+      {/* Stays at the top on a phone, so the way back and the versions are always under the thumb.
+          It sits outside the header, because a sticky element only sticks inside its parent. */}
       <div className="sticky top-0 z-20 -mx-4 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center gap-1 border-b bg-background/85 px-2 pt-[env(safe-area-inset-top)] backdrop-blur md:static md:mx-0 md:h-auto md:border-0 md:bg-transparent md:px-0 md:pt-0 md:backdrop-blur-none">
         <Link
           to={{ pathname: "/", search }}
@@ -566,77 +567,79 @@ function Header({
         </div>
       </div>
 
-      {cover && (
-        <Cover
-          src={cover.src}
-          alt={title || "Photo of the recipe"}
-          count={photoCount}
-          onOpen={onCover}
-        />
-      )}
+      <header className="-mt-3 flex flex-col gap-5 md:-mt-5">
+        {cover && (
+          <Cover
+            src={cover.src}
+            alt={title || "Photo of the recipe"}
+            count={photoCount}
+            onOpen={onCover}
+          />
+        )}
 
-      <div className="flex flex-col gap-3">
-        <Textarea
-          id="recipe-title"
-          value={title}
-          onChange={(event) => onTitle(event.target.value.replace(/\n/g, " "))}
-          onKeyDown={(event) => {
-            // Enter is done with the name: on to the first ingredient.
-            if (event.key === "Enter") {
-              event.preventDefault()
-              document.getElementById("quick-add")?.focus()
-            }
-          }}
-          placeholder="Name this recipe…"
-          aria-label="Recipe name"
-          rows={1}
-          maxLength={LIMITS.title}
-          // On a phone this would raise the keyboard before the person has chosen to type.
-          autoFocus={!base && !title && fine}
-          className="-mx-2 field-sizing-content min-h-0 resize-none border-transparent bg-transparent px-2 py-1 font-heading text-[1.75rem] leading-tight font-medium text-balance shadow-none hover:bg-muted/60 focus-visible:bg-muted/50 focus-visible:shadow-[0_2px_0_0_var(--primary)] focus-visible:ring-0 md:text-3xl dark:bg-transparent"
-        />
+        <div className="flex flex-col gap-3">
+          <Textarea
+            id="recipe-title"
+            value={title}
+            onChange={(event) => onTitle(event.target.value.replace(/\n/g, " "))}
+            onKeyDown={(event) => {
+              // Enter is done with the name: on to the first ingredient.
+              if (event.key === "Enter") {
+                event.preventDefault()
+                document.getElementById("quick-add")?.focus()
+              }
+            }}
+            placeholder="Name this recipe…"
+            aria-label="Recipe name"
+            rows={1}
+            maxLength={LIMITS.title}
+            // On a phone this would raise the keyboard before the person has chosen to type.
+            autoFocus={!base && !title && fine}
+            className="-mx-2 field-sizing-content min-h-0 resize-none border-transparent bg-transparent px-2 py-1 font-heading text-[1.75rem] leading-tight font-medium text-balance shadow-none hover:bg-muted/60 focus-visible:bg-muted/50 focus-visible:shadow-[0_2px_0_0_var(--primary)] focus-visible:ring-0 md:text-3xl dark:bg-transparent"
+          />
 
-        <div className="flex flex-wrap items-center gap-2">
-          {isDraft && <DraftPill />}
-          {base ? (
-            <Tooltip>
-              <TooltipTrigger render={<span className="cursor-default" />}>
-                <Chip icon={Clock01Icon}>Edited {timeAgo(base.updatedAt)}</Chip>
-              </TooltipTrigger>
-              <TooltipContent>{longDate(base.updatedAt)}</TooltipContent>
-            </Tooltip>
-          ) : (
-            <Chip icon={Notebook01Icon}>Not saved yet</Chip>
-          )}
-          {yieldChip}
-          {parent && (
-            <Link
-              to={{ pathname: `/recipes/${parent.id}`, search }}
-              className="md:hidden"
-              aria-label={`A version of ${parent.title}`}
-            >
-              <Chip icon={GitBranchIcon}>
-                <span className="max-w-44 truncate">Version of {parent.title}</span>
-              </Chip>
-            </Link>
-          )}
-          <InputGroup className="h-7 w-44 max-w-full rounded-full border-transparent bg-muted text-xs focus-within:w-72 md:h-7 pointer-coarse:h-8">
-            <InputGroupAddon className="pl-2.5">
-              <HugeiconsIcon icon={Link01Icon} strokeWidth={2} className="size-3.5" />
-            </InputGroupAddon>
-            <InputGroupInput
-              value={source}
-              onChange={(event) => onSource(event.target.value)}
-              placeholder="Where is it from…"
-              aria-label="Source"
-              maxLength={LIMITS.source}
-              autoComplete="off"
-              className="text-xs md:text-xs"
-            />
-          </InputGroup>
+          <div className="flex flex-wrap items-center gap-2">
+            {isDraft && <DraftPill />}
+            {base ? (
+              <Tooltip>
+                <TooltipTrigger render={<span className="cursor-default" />}>
+                  <Chip icon={Clock01Icon}>Edited {timeAgo(base.updatedAt)}</Chip>
+                </TooltipTrigger>
+                <TooltipContent>{longDate(base.updatedAt)}</TooltipContent>
+              </Tooltip>
+            ) : (
+              <Chip icon={Notebook01Icon}>Not saved yet</Chip>
+            )}
+            {yieldChip}
+            {parent && (
+              <Link
+                to={{ pathname: `/recipes/${parent.id}`, search }}
+                className="md:hidden"
+                aria-label={`A version of ${parent.title}`}
+              >
+                <Chip icon={GitBranchIcon}>
+                  <span className="max-w-44 truncate">Version of {parent.title}</span>
+                </Chip>
+              </Link>
+            )}
+            <InputGroup className="h-7 w-44 max-w-full rounded-full border-transparent bg-muted text-xs focus-within:w-72 md:h-7 pointer-coarse:h-8">
+              <InputGroupAddon className="pl-2.5">
+                <HugeiconsIcon icon={Link01Icon} strokeWidth={2} className="size-3.5" />
+              </InputGroupAddon>
+              <InputGroupInput
+                value={source}
+                onChange={(event) => onSource(event.target.value)}
+                placeholder="Where is it from…"
+                aria-label="Source"
+                maxLength={LIMITS.source}
+                autoComplete="off"
+                className="text-xs md:text-xs"
+              />
+            </InputGroup>
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+    </>
   )
 }
 
