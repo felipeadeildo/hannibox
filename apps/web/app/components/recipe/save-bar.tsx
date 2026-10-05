@@ -45,6 +45,7 @@ export function SaveBar({
       // `inert`, not `aria-hidden`: the button that was just pressed still has focus, and hiding a
       // focused element from assistive technology is not allowed. Inert also takes it out of the tab order.
       inert={!visible}
+      data-toast-floor
     >
       <div
         role="region"

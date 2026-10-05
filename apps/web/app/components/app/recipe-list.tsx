@@ -307,12 +307,14 @@ export function RecipeList({ activeId }: { activeId?: string }) {
         {body()}
       </ScrollArea>
 
-      {/* A phone has its thumb at the bottom, so the way to start a recipe is down there. */}
+      {/* A phone has its thumb at the bottom, so the way to start a recipe is down there. Toasts
+          clear it while it is on screen, which on a phone is when no recipe is open. */}
       <Button
         size="icon-lg"
         className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-20 size-14 rounded-2xl shadow-lg md:hidden"
         aria-label="New recipe"
         onClick={() => newRecipe()}
+        data-toast-floor={activeId ? undefined : ""}
       >
         <HugeiconsIcon icon={Add01Icon} strokeWidth={2} className="size-6" />
       </Button>
