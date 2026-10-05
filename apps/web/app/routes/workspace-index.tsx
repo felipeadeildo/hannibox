@@ -14,7 +14,7 @@ import {
 import { Kbd } from "~/components/ui/kbd"
 
 export function meta() {
-  return [{ title: "Recipes · hannibox" }]
+  return [{ title: "Recipes" }]
 }
 
 // Only seen beside the list: on a phone the list is the whole screen.

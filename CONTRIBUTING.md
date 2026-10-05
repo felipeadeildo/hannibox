@@ -52,6 +52,12 @@ An ingredient line is `{ name, quantity, unit }`. A new name creates the ingredi
 
 A write that touches several tables goes in one `db.batch`, which D1 runs as a transaction. A list of ingredient lines travels as one JSON that `json_each` unfolds, because D1 takes 100 bound parameters per query and 50 queries per invocation on the free plan.
 
+## Icons and search
+
+The icons, the social card, `site.webmanifest`, `robots.txt` and `sitemap.xml` are in `apps/web/public`. The title, the description and the card for every page come from `app/lib/site.ts`, and the site address is written in that file, in `robots.txt` and in `sitemap.xml`. Change all three if the address changes.
+
+Only the sign-in page is meant to be found. `react-router.config.ts` prerenders `/auth` to its own HTML, so a crawler reads its title and description without running JavaScript, and `html_handling` in `wrangler.jsonc` serves it at `/auth` without a redirect. Recipes are private: `robots.txt` disallows `/recipes/` and `/api/`. Take the `/recipes/` line out when recipes are meant to be indexed.
+
 ## Checks
 
 `bun run verify` runs typecheck, Oxlint and the Oxfmt check. Lefthook installs itself on `bun install`. It lints and formats staged files on commit and typechecks on push. Personal overrides go in `lefthook-local.yml`.

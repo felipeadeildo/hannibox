@@ -1,0 +1,7 @@
+# Recipes are private for now. Take the /recipes/ line out when they are meant to be found.
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /recipes/
+
+Sitemap: https://hannibox.aldeido.workers.dev/sitemap.xml

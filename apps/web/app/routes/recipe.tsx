@@ -43,7 +43,7 @@ export function shouldRevalidate({ currentParams, nextParams }: ShouldRevalidate
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
-  return [{ title: `${loaderData?.title ?? "New recipe"} · hannibox` }]
+  return [{ title: loaderData?.title ?? "New recipe" }]
 }
 
 export default function RecipeRoute({ params }: Route.ComponentProps) {

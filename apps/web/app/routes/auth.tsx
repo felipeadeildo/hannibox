@@ -7,6 +7,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "~/componen
 import { Input } from "~/components/ui/input"
 import { Label } from "~/components/ui/label"
 import { authClient } from "~/lib/auth-client"
+import { pageMeta } from "~/lib/site"
 
 import type { Route } from "./+types/auth"
 
@@ -19,6 +20,15 @@ const COPY = {
   "sign-in": { title: "Sign in", switchTo: "sign-up", switchLabel: "Create an account" },
   "sign-up": { title: "Create an account", switchTo: "sign-in", switchLabel: "I already have one" },
 } satisfies Record<Mode, { title: string; switchTo: Mode; switchLabel: string }>
+
+export function meta() {
+  return pageMeta({
+    title: "Sign in to hannibox",
+    description:
+      "Sign in to hannibox, or create an account, to keep your recipes and every version of them.",
+    path: "/auth",
+  })
+}
 
 export async function clientLoader() {
   const { data } = await authClient.getSession()
