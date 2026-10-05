@@ -21,6 +21,8 @@ export const LIMITS = {
   content: 100_000,
   ingredientName: 80,
   ingredients: 50,
+  sections: 12,
+  sectionTitle: 60,
   /** Past this, a typo is likelier than a recipe: 100 000 g is a hundred kilos. */
   quantity: 100_000,
 } as const
@@ -47,32 +49,96 @@ export const IngredientLine = z.object({
 })
 export type IngredientLine = z.infer<typeof IngredientLine>
 
-const Ingredients = z
-  .array(IngredientLine)
-  .max(LIMITS.ingredients, `A recipe takes up to ${LIMITS.ingredients} ingredients`)
-  .refine((lines) => new Set(lines.map((line) => line.name)).size === lines.length, {
-    error: "Each ingredient can appear only once",
+export const SectionTitle = z
+  .string()
+  .trim()
+  .min(1, "Name the section")
+  .max(LIMITS.sectionTitle, `A section's name fits in ${LIMITS.sectionTitle} characters`)
+
+/** "Dough" and "dough" are the same section. */
+export function sameTitle(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase()
+}
+
+export const Section = z.object({
+  // Null for a list that starts without a heading, which only the first section can do.
+  title: SectionTitle.nullable(),
+  lines: z.array(IngredientLine).superRefine((lines, ctx) => {
+    const seen = new Set<string>()
+    for (const [index, { name }] of lines.entries()) {
+      if (seen.has(name)) {
+        ctx.addIssue({ code: "custom", message: `${name} is in one section twice`, path: [index] })
+      }
+      seen.add(name)
+    }
+  }),
+})
+export type Section = z.infer<typeof Section>
+
+const Sections = z
+  .array(Section)
+  .max(LIMITS.sections, `A recipe takes up to ${LIMITS.sections} sections`)
+  .superRefine((sections, ctx) => {
+    const lines = sections.reduce((sum, section) => sum + section.lines.length, 0)
+    if (lines > LIMITS.ingredients) {
+      ctx.addIssue({
+        code: "custom",
+        message: `A recipe takes up to ${LIMITS.ingredients} ingredient lines, all sections together`,
+      })
+    }
+    const seen = new Set<string>()
+    for (const [index, { title }] of sections.entries()) {
+      const path = [index, "title"]
+      if (title === null) {
+        if (index > 0) {
+          ctx.addIssue({
+            code: "custom",
+            message: "Only the first section can go without a name",
+            path,
+          })
+        }
+        continue
+      }
+      // "Dough" and "dough" are the same section.
+      if (seen.has(title.toLowerCase())) {
+        ctx.addIssue({ code: "custom", message: `There are two sections called ${title}`, path })
+      }
+      seen.add(title.toLowerCase())
+    }
   })
 
-const Fields = z.object({
-  title: z
-    .string()
-    .trim()
-    .min(1, "Give the recipe a name")
-    .max(LIMITS.title, `A recipe's name fits in ${LIMITS.title} characters`),
-  source: z
-    .string()
-    .trim()
-    .max(LIMITS.source, `Where it is from fits in ${LIMITS.source.toLocaleString("en")} characters`)
-    .nullable(),
-  content: z
-    .string()
-    .max(LIMITS.content, `The steps fit in ${LIMITS.content.toLocaleString("en")} characters`),
-  yield: Quantity.nullable(),
-  yieldUnit: Unit.nullable(),
-  // The whole list, in order. Sending it replaces the recipe's current one.
-  ingredients: Ingredients,
-})
+// A field the API does not know is refused, not dropped. Otherwise a tab left open from before a
+// change, like `ingredients` turning into `sections`, would save a recipe without what it sent.
+const Fields = z.strictObject(
+  {
+    title: z
+      .string()
+      .trim()
+      .min(1, "Give the recipe a name")
+      .max(LIMITS.title, `A recipe's name fits in ${LIMITS.title} characters`),
+    source: z
+      .string()
+      .trim()
+      .max(
+        LIMITS.source,
+        `Where it is from fits in ${LIMITS.source.toLocaleString("en")} characters`,
+      )
+      .nullable(),
+    content: z
+      .string()
+      .max(LIMITS.content, `The steps fit in ${LIMITS.content.toLocaleString("en")} characters`),
+    yield: Quantity.nullable(),
+    yieldUnit: Unit.nullable(),
+    // Every section and its lines, in order. Sending them replaces the recipe's current ones.
+    sections: Sections,
+  },
+  {
+    error: (issue) =>
+      issue.code === "unrecognized_keys"
+        ? "This page is out of date. Reload it and try again."
+        : undefined,
+  },
+)
 
 /** The ids of the photos that stay. Sent, the others go; left out, they all stay. */
 const Photos = z.array(z.string()).max(100)

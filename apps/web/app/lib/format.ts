@@ -1,6 +1,7 @@
 const dayMonth = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit" })
 const long = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short" })
 const relative = new Intl.RelativeTimeFormat("en", { numeric: "auto" })
+const conjunction = new Intl.ListFormat("en-GB", { type: "conjunction" })
 
 export const shortDate = (iso: string) => dayMonth.format(new Date(iso))
 
@@ -20,4 +21,14 @@ export function timeAgo(iso: string, now = Date.now()) {
     if (Math.abs(seconds) >= size) return relative.format(Math.round(seconds / size), unit)
   }
   return "just now"
+}
+
+/** "a", "a and b", "a, b and c". */
+export function listOf(items: string[]): string {
+  return conjunction.format(items)
+}
+
+/** Text that starts with a name, like "water is already in Dough.", as a sentence. */
+export function sentence(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1)
 }

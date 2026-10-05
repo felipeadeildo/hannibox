@@ -5,7 +5,7 @@ import {
   ListRecipes,
   UpdateRecipe,
   type ApiError,
-  type IngredientLine,
+  type Section,
   type Unit,
 } from "@hannibox/shared"
 import { and, count, desc, eq, isNull, lt, notInArray, or, sql } from "drizzle-orm"
@@ -19,9 +19,7 @@ import type { Photo } from "../photos"
 import { SaveForm, readSave } from "../save"
 import { validate } from "../validate"
 
-const { image, ingredient, recipe, recipeIngredient } = schema
-
-type Line = Pick<IngredientLine, "name" | "quantity" | "unit">
+const { image, ingredient, recipe, recipeIngredient, recipeSection } = schema
 
 const writeCursor = (row: { updatedAt: Date; id: string }) => `${row.updatedAt.getTime()}_${row.id}`
 
@@ -53,21 +51,30 @@ async function loadRecipe(db: Db, userId: string, id: string) {
     where: (r, { and, eq }) => and(eq(r.id, id), eq(r.userId, userId)),
     with: {
       images: { columns: { id: true, mimeType: true } },
-      ingredients: {
-        orderBy: (line, { asc }) => [asc(line.position)],
-        with: { ingredient: { with: { images: { columns: { id: true }, limit: 1 } } } },
+      sections: {
+        columns: { title: true },
+        orderBy: (section, { asc }) => [asc(section.position)],
+        with: {
+          lines: {
+            orderBy: (line, { asc }) => [asc(line.position)],
+            with: { ingredient: { with: { images: { columns: { id: true }, limit: 1 } } } },
+          },
+        },
       },
     },
   })
   if (!row) return undefined
   return {
     ...row,
-    ingredients: row.ingredients.map(({ quantity, unit, ingredient }) => ({
-      ingredientId: ingredient.id,
-      name: ingredient.name,
-      quantity,
-      unit,
-      imageId: ingredient.images[0]?.id ?? null,
+    sections: row.sections.map(({ title, lines }) => ({
+      title,
+      lines: lines.map(({ quantity, unit, ingredient }) => ({
+        ingredientId: ingredient.id,
+        name: ingredient.name,
+        quantity,
+        unit,
+        imageId: ingredient.images[0]?.id ?? null,
+      })),
     })),
   }
 }
@@ -85,13 +92,26 @@ function writePhotos(db: Db, recipeId: string, photos: Photo[]) {
 const refused = (c: Context<UserEnv>, save: { status: 400 | 413 | 415; body: ApiError }) =>
   c.json(save.body, save.status)
 
-// Writes the lines in two statements however long the list is. D1 takes 100 bound parameters
-// per query and 50 queries per invocation on the free plan, so each list travels as one JSON
-// and `json_each` unfolds it. An `insert ... select` fills every column, in the schema's order.
-function writeIngredients(db: Db, recipeId: string, lines: Line[]) {
-  const names = JSON.stringify(lines.map(({ name }) => ({ id: crypto.randomUUID(), name })))
+// Writes the sections and their lines in three statements however long they are. D1 takes 100
+// bound parameters per query and 50 queries per invocation on the free plan, so each list travels
+// as one JSON and `json_each` unfolds it. An `insert ... select` fills every column, in the
+// schema's order.
+function writeSections(db: Db, recipeId: string, sections: Section[]) {
+  const withIds = sections.map((section) => ({ ...section, id: crypto.randomUUID() }))
+  // Flour in two sections is one ingredient.
+  const everyName = new Set(sections.flatMap(({ lines }) => lines.map(({ name }) => name)))
+  const names = JSON.stringify([...everyName].map((name) => ({ id: crypto.randomUUID(), name })))
+  const heads = JSON.stringify(withIds.map(({ id, title }, position) => ({ id, title, position })))
   const rows = JSON.stringify(
-    lines.map(({ name, quantity, unit }, position) => ({ name, quantity, unit, position })),
+    withIds.flatMap(({ id, lines }) =>
+      lines.map(({ name, quantity, unit }, position) => ({
+        sectionId: id,
+        name,
+        quantity,
+        unit,
+        position,
+      })),
+    ),
   )
   return [
     db
@@ -107,10 +127,20 @@ function writeIngredients(db: Db, recipeId: string, lines: Line[]) {
           .where(sql`true`),
       )
       .onConflictDoNothing(),
+    db.insert(recipeSection).select(
+      db
+        .select({
+          id: sql<string>`value ->> 'id'`.as("id"),
+          recipeId: sql<string>`${recipeId}`.as("recipe_id"),
+          title: sql<string | null>`value ->> 'title'`.as("title"),
+          position: sql<number>`value ->> 'position'`.as("position"),
+        })
+        .from(sql`json_each(${heads})`),
+    ),
     db.insert(recipeIngredient).select(
       db
         .select({
-          recipeId: sql<string>`${recipeId}`.as("recipe_id"),
+          sectionId: sql<string>`j.value ->> 'sectionId'`.as("section_id"),
           ingredientId: ingredient.id,
           quantity: sql<number>`j.value ->> 'quantity'`.as("quantity"),
           unit: sql<Unit | null>`j.value ->> 'unit'`.as("unit"),
@@ -144,8 +174,9 @@ export default new Hono<UserEnv>()
           // What a row of the list shows: how much is in it, what grew from it, and its first photo.
           // The outer table is named in full: in a one-table select Drizzle writes `${recipe.id}`
           // as a bare "id", which inside these subqueries would mean their own id.
+          // Flour in two sections is still one ingredient to buy.
           ingredients:
-            sql<number>`(select count(*) from recipe_ingredient where recipe_ingredient.recipe_id = recipe.id)`.mapWith(
+            sql<number>`(select count(distinct recipe_ingredient.ingredient_id) from recipe_section join recipe_ingredient on recipe_ingredient.section_id = recipe_section.id where recipe_section.recipe_id = recipe.id)`.mapWith(
               Number,
             ),
           versions:
@@ -180,13 +211,13 @@ export default new Hono<UserEnv>()
   .post("/", validate("form", SaveForm), async (c) => {
     const save = await readSave(CreateRecipe, c.req.valid("form"))
     if (!save.ok) return refused(c, save)
-    const { ingredients = [], ...fields } = save.data
+    const { sections = [], ...fields } = save.data
     const db = c.get("db")
     const userId = c.get("user").id
     const id = crypto.randomUUID()
     await db.batch([
       db.insert(recipe).values({ id, userId, ...fields }),
-      ...writeIngredients(db, id, ingredients),
+      ...writeSections(db, id, sections),
       ...writePhotos(db, id, save.photos),
     ])
     return c.json(must(await loadRecipe(db, userId, id)), 201)
@@ -198,7 +229,7 @@ export default new Hono<UserEnv>()
   .patch("/:id", validate("form", SaveForm), async (c) => {
     const save = await readSave(UpdateRecipe, c.req.valid("form"))
     if (!save.ok) return refused(c, save)
-    const { ingredients, images, ...fields } = save.data
+    const { sections, images, ...fields } = save.data
     const db = c.get("db")
     const userId = c.get("user").id
     const id = c.req.param("id")
@@ -223,10 +254,11 @@ export default new Hono<UserEnv>()
               ),
           ]
         : []),
-      ...(ingredients
+      // Deleting the sections deletes their lines with them.
+      ...(sections
         ? [
-            db.delete(recipeIngredient).where(eq(recipeIngredient.recipeId, id)),
-            ...writeIngredients(db, id, ingredients),
+            db.delete(recipeSection).where(eq(recipeSection.recipeId, id)),
+            ...writeSections(db, id, sections),
           ]
         : []),
       ...writePhotos(db, id, save.photos),
@@ -289,7 +321,7 @@ export default new Hono<UserEnv>()
   .post("/:id/variations", validate("form", SaveForm), async (c) => {
     const save = await readSave(CreateVariation, c.req.valid("form"))
     if (!save.ok) return refused(c, save)
-    const { ingredients, images, ...changes } = save.data
+    const { sections, images, ...changes } = save.data
     const db = c.get("db")
     const userId = c.get("user").id
     const from = await loadRecipe(db, userId, c.req.param("id"))
@@ -323,7 +355,7 @@ export default new Hono<UserEnv>()
           .from(sql`json_each(${JSON.stringify(copies)}) as j`)
           .innerJoin(image, sql`${image.id} = j.value ->> 'from'`),
       ),
-      ...writeIngredients(db, id, ingredients ?? from.ingredients),
+      ...writeSections(db, id, sections ?? from.sections),
       ...writePhotos(db, id, save.photos),
     ])
     return c.json(must(await loadRecipe(db, userId, id)), 201)

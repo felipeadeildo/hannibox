@@ -45,11 +45,13 @@ Overwriting is there for fixing a typo in place, and its menu tells you when it 
 
 Type "1/2 tsp cinnamon" and hannibox reads an amount, a unit and a name, and shows what it understood before you add it. Ingredients are shared between recipes, so the field suggests the ones you already use. The 1x, 2x and 3x buttons scale the amounts you see without changing what is saved.
 
+A recipe made in parts can have sections. Type a line that ends in a colon, like "Dough:", and what you add next goes under it. The same ingredient can go in two sections, like flour in the poolish and in the dough, and "In total" adds it up.
+
 <img src="docs/images/quick-add.webp" width="760" alt="The ingredient field with 1/2 tsp cinnamon typed in, read as half a teaspoon of cinnamon." />
 
 ## Made for the counter
 
-The list and the recipe take turns on a narrow screen, buttons and fields grow on touch screens, and there is a dark theme. Drag the handle to reorder ingredients.
+The list and the recipe take turns on a narrow screen, buttons and fields grow on touch screens, and there is a dark theme. Drag the handle to reorder ingredients, move one to another section, or move a whole section.
 
 <img src="docs/images/phones.webp" width="860" alt="Three phone screens: the recipe list, a recipe with its ingredients, and the versions panel." />
 

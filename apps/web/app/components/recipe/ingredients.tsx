@@ -1,11 +1,19 @@
 import {
+  type Announcements,
+  type CollisionDetection,
   DndContext,
+  type DragEndEvent,
+  type DragOverEvent,
+  DragOverlay,
+  type DragStartEvent,
   KeyboardSensor,
+  MeasuringStrategy,
+  type Over,
   PointerSensor,
+  type UniqueIdentifier,
   closestCenter,
   useSensor,
   useSensors,
-  type DragEndEvent,
 } from "@dnd-kit/core"
 import {
   SortableContext,
@@ -18,68 +26,203 @@ import { CSS } from "@dnd-kit/utilities"
 import { HugeiconsIcon } from "~/components/app/icon"
 import {
   Add01Icon,
-  AlertCircleIcon,
-  Camera01Icon,
-  Cancel01Icon,
+  Delete02Icon,
   DragDropVerticalIcon,
   EggsIcon,
   MilkBottleIcon,
+  MoreHorizontalIcon,
+  MoveDownIcon,
+  MoveUpIcon,
+  PencilEdit02Icon,
   WheatIcon,
 } from "@hugeicons/core-free-icons"
-import { useQuery } from "@tanstack/react-query"
-import { IngredientLine, IngredientName, LIMITS, type Unit, firstProblem } from "@hannibox/shared"
+import { LIMITS, sameTitle } from "@hannibox/shared"
 import { cn } from "cn"
-import { useEffect, useId, useMemo, useRef, useState } from "react"
+import { type ReactNode, useCallback, useId, useMemo, useState } from "react"
 import { toast } from "sonner"
 
-import { AdaptivePanel } from "~/components/app/adaptive-panel"
 import { EmptyArt } from "~/components/app/empty-art"
 import { Tile } from "~/components/app/tile"
-import { AmountField, UnitPicker } from "~/components/recipe/amount-fields"
+import { Line, type Saved } from "~/components/recipe/ingredient-line"
+import { QuickAdd } from "~/components/recipe/quick-add"
+import { Totals } from "~/components/recipe/totals"
 import { Button } from "~/components/ui/button"
-import { Input } from "~/components/ui/input"
-import { Kbd } from "~/components/ui/kbd"
-import { ScrollArea } from "~/components/ui/scroll-area"
-import { Skeleton } from "~/components/ui/skeleton"
-import { Spinner } from "~/components/ui/spinner"
-import { useDebounced } from "~/hooks/use-debounced"
-import { ingredientArt } from "~/lib/art"
-import type { DraftLine } from "~/lib/drafts"
 import {
-  type ParsedLine,
-  checkQuantity,
-  formatQuantity,
-  parseLine,
-  unitLabel,
-  unscale,
-} from "~/lib/quantity"
-import { type RecipeDetail, ingredientOptions, useSetIngredientPhoto } from "~/lib/recipes"
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "~/components/ui/dropdown-menu"
+import { ScrollArea } from "~/components/ui/scroll-area"
+import { useMedia } from "~/hooks/use-media"
+import { ingredientArt } from "~/lib/art"
+import type { DraftLine, DraftSection } from "~/lib/drafts"
+import { sentence } from "~/lib/format"
+import { formatAmount } from "~/lib/quantity"
+import type { RecipeDetail } from "~/lib/recipes"
+import {
+  addLine,
+  canMove,
+  changeLine,
+  insertAt,
+  moveSection,
+  newSectionKey,
+  placeLine,
+  placeName,
+  placeholderTitle,
+  placesOf,
+  removeLine,
+  removeSection,
+  renameSection,
+  restoreLine,
+  restoreSection,
+  splitSection,
+  titleProblem,
+  totalsOf,
+} from "~/lib/sections"
 
-/** Changes the list as it is when the change runs, so a late Undo cannot undo more than it should. */
-export type EditLines = (change: (lines: DraftLine[]) => DraftLine[]) => void
+/** Changes the sections as they are when the change runs, so a late Undo cannot undo too much. */
+export type EditSections = (change: (sections: DraftSection[]) => DraftSection[]) => void
 
-type Saved = RecipeDetail["ingredients"][number]
+/** Names to tap for a new section. */
+const SUGGESTED = ["Dough", "Filling", "Topping", "Sauce", "Frosting", "Glaze"]
+
+type Row = { id: string; line: DraftLine }
+type Column = { key: string; rows: Row[] }
+type Dragged = { section: DraftSection } | { row: Row; from: string }
+
+function lineId(key: string, name: string): string {
+  return `${key}:${name}`
+}
+
+function columnsOf(sections: DraftSection[]): Column[] {
+  return sections.map(({ key, lines }) => ({
+    key,
+    rows: lines.map((line) => ({ id: lineId(key, line.name), line })),
+  }))
+}
+
+/** Once as a drag starts or crosses sections, twice for a refusal. */
+function buzz(pattern: number | number[] = 8): void {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return
+  if ("vibrate" in navigator) navigator.vibrate(pattern)
+}
+
+const reveal =
+  "pointer-fine:opacity-0 pointer-fine:transition-opacity pointer-fine:group-hover/head:opacity-100 pointer-fine:focus-visible:opacity-100 pointer-fine:data-popup-open:opacity-100"
 
 /**
- * The list, which you can change at any scale. The scale is a lens: what you see is what you
- * edit, and it is turned back into the recipe's own size when it is kept.
+ * The ingredients, in sections when the recipe has them, which you can change at any scale. The
+ * scale is a lens: what you see is what you edit, and it is turned back into the recipe's own size
+ * when it is kept.
  */
 export function Ingredients({
-  lines,
+  sections,
   base,
   scale,
   onEdit,
 }: {
-  lines: DraftLine[]
+  sections: DraftSection[]
   base?: RecipeDetail
   scale: number
-  onEdit: EditLines
+  onEdit: EditSections
 }) {
+  const wide = useMedia("(min-width: 768px)")
+  const [active, setActive] = useState<string>()
+  const [naming, setNaming] = useState<string | null>(null)
+  const [text, setText] = useState("")
+  const [focusAdd, setFocusAdd] = useState(false)
+  const onFocused = useCallback(() => setFocusAdd(false), [])
+
+  // While a line is dragged, the lines stay here, so it can pass through other sections without
+  // the draft changing at every step. The draft changes once, when it is dropped.
+  const [columns, setColumns] = useState<Column[] | null>(null)
+  const [dragged, setDragged] = useState<Dragged | null>(null)
+  // The section a dragged line is over, when it is not the one it came from. `clash` when that
+  // section has the ingredient already, and the line cannot go in.
+  const [landing, setLanding] = useState<{ key: string; clash: boolean } | null>(null)
+  // The line just dropped on a section that has it, and when, so it shakes.
+  const [refused, setRefused] = useState<{ id: string; at: number } | null>(null)
+
   const saved = useMemo(
-    () => new Map((base?.ingredients ?? []).map((line) => [line.name, line])),
+    () =>
+      new Map(
+        (base?.sections ?? []).flatMap((section) => section.lines.map((line) => [line.name, line])),
+      ),
     [base],
   )
-  const names = useMemo(() => new Set(lines.map((line) => line.name)), [lines])
+  const sectioned = sections.length > 1 || Boolean(sections[0]?.title)
+  const places = placesOf(sections)
+  // The field adds to the section last picked, or else to the last one.
+  const target = places.find((place) => place.key === active) ?? places.at(-1)
+  const view = columns ?? columnsOf(sections)
+
+  const totals = totalsOf(sections)
+  const partsOf = new Map(totals.map(({ name, parts }) => [name, parts]))
+
+  /** A new section at the end. With a name, the field moves into it. Without one, it asks for one. */
+  function startSection(title: string, lines: DraftLine[] = [], ask = false) {
+    const key = newSectionKey()
+    onEdit((current) => [...current, { key, title, lines }])
+    setActive(key)
+    if (ask) setNaming(key)
+    else setFocusAdd(true)
+  }
+
+  function rename(key: string, title: string, then: "stay" | "add") {
+    onEdit((current) => renameSection(current, key, title))
+    setNaming(null)
+    if (then === "add" && key === target?.key) setFocusAdd(true)
+  }
+
+  function remove(section: DraftSection) {
+    const index = sections.findIndex((other) => other.key === section.key)
+    onEdit((current) => removeSection(current, section.key))
+    toast(`Removed ${placeName(section.title, true)}`, {
+      description: linesGone(section.lines.length),
+      action: {
+        label: "Undo",
+        onClick: () => onEdit((current) => restoreSection(current, section, index)),
+      },
+    })
+  }
+
+  /** Saves a line edited in its sheet, and moves it to section `to` when that is another one. */
+  function saveLine(key: string, name: string, next: DraftLine, to: string) {
+    onEdit((current) => {
+      const changed = changeLine(current, key, name, next)
+      return to === key ? changed : placeLine(changed, key, next.name, to)
+    })
+  }
+
+  /** Starts a section at line `at` of section `key`, and asks for its name. */
+  function splitAt(key: string, at: number) {
+    const fresh = newSectionKey()
+    onEdit((current) =>
+      splitSection(current, key, at, { key: fresh, title: placeholderTitle(current) }),
+    )
+    setActive(fresh)
+    setNaming(fresh)
+  }
+
+  function removeFrom(section: DraftSection, line: DraftLine) {
+    const index = section.lines.indexOf(line)
+    const at = sections.indexOf(section)
+    onEdit((current) => removeLine(current, section.key, line.name))
+    toast(`Removed ${line.name}`, {
+      action: {
+        label: "Undo",
+        // The first section goes when its last line does, so Undo may have to bring it back.
+        onClick: () =>
+          onEdit((current) =>
+            current.some((other) => other.key === section.key)
+              ? restoreLine(current, section.key, index, line)
+              : restoreSection(current, { ...section, lines: [line] }, at),
+          ),
+      },
+    })
+  }
 
   // The handle is the only thing that drags and it does not scroll (`touch-none`), so a few pixels
   // of movement is enough for a finger as much as for a mouse.
@@ -88,103 +231,332 @@ export function Ingredients({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
-  function onDragEnd({ active, over }: DragEndEvent) {
-    if (!over || active.id === over.id) return
-    onEdit((current) =>
-      arrayMove(
-        current,
-        current.findIndex((line) => line.name === active.id),
-        current.findIndex((line) => line.name === over.id),
-      ),
-    )
-  }
-
-  function remove(line: DraftLine) {
-    const index = lines.findIndex((other) => other.name === line.name)
-    onEdit((current) => current.filter((other) => other.name !== line.name))
-    toast(`Removed ${line.name}`, {
-      action: {
-        label: "Undo",
-        onClick: () =>
-          onEdit((current) =>
-            current.some((other) => other.name === line.name)
-              ? current
-              : [...current.slice(0, index), line, ...current.slice(index)],
-          ),
-      },
+  // A section lands among sections. A line lands on another line, or in a section with no lines.
+  const detect: CollisionDetection = (args) => {
+    const kind = args.active.data.current?.type
+    const droppableContainers = args.droppableContainers.filter((container) => {
+      const data = container.data.current
+      if (kind === "section") return data?.type === "section"
+      return data?.type === "line" || (data?.type === "section" && data.empty === true)
     })
+    return closestCenter({ ...args, droppableContainers })
   }
 
-  return (
-    <div className="flex flex-col gap-3">
-      {lines.length === 0 ? (
+  function onDragStart({ active }: DragStartEvent) {
+    buzz()
+    const data = active.data.current
+    if (data?.type === "section") {
+      const section = sections.find((other) => other.key === data.key)
+      if (section) setDragged({ section })
+      return
+    }
+    const start = columnsOf(sections)
+    setColumns(start)
+    const column = start.find((other) => other.rows.some((row) => row.id === active.id))
+    const row = column?.rows.find((other) => other.id === active.id)
+    // The section it started in. Its row only says where it is now, which changes as it moves.
+    if (column && row) setDragged({ row, from: column.key })
+  }
+
+  function onDragOver({ active, over }: DragOverEvent) {
+    if (!columns || !dragged || !("row" in dragged)) return
+    if (!over) {
+      setLanding(null)
+      return
+    }
+    const into = over.data.current?.type === "section" ? over.data.current.key : undefined
+    const from = columns.find((column) => column.rows.some((row) => row.id === active.id))
+    const to = columns.find((column) =>
+      into ? column.key === into : column.rows.some((row) => row.id === over.id),
+    )
+    if (!from || !to) return
+    const { row } = dragged
+    const clash = to.key !== from.key && to.rows.some((other) => other.line.name === row.line.name)
+    setLanding(to.key === dragged.from && !clash ? null : { key: to.key, clash })
+    if (clash || to.key === from.key) return
+
+    // Over a line, it goes before it, or after it when the dragged one is past its middle.
+    const moving = active.rect.current.translated
+    const below =
+      moving !== null && moving.top + moving.height / 2 > over.rect.top + over.rect.height / 2
+    const at = into
+      ? to.rows.length
+      : to.rows.findIndex((other) => other.id === over.id) + (below ? 1 : 0)
+    setColumns(
+      columns.map((column) => {
+        if (column.key === from.key) {
+          return { ...column, rows: column.rows.filter((other) => other.id !== active.id) }
+        }
+        if (column.key === to.key) {
+          return { ...column, rows: insertAt(column.rows, at, row) }
+        }
+        return column
+      }),
+    )
+    buzz()
+  }
+
+  function onDragEnd({ active, over }: DragEndEvent) {
+    if (dragged && "section" in dragged && over && over.id !== active.id) {
+      const { key } = dragged.section
+      const onto = over.data.current?.key
+      onEdit((current) => {
+        const at = current.findIndex((section) => section.key === onto)
+        return at === -1 ? current : moveSection(current, key, at)
+      })
+    }
+    if (dragged && "row" in dragged && columns) {
+      const { from, row } = dragged
+      const column = columns.find((each) => each.rows.some((other) => other.id === row.id))
+      if (column) {
+        const at = column.rows.findIndex((other) => other.id === row.id)
+        const onto = over ? column.rows.findIndex((other) => other.id === over.id) : -1
+        const rows = onto === -1 ? column.rows : arrayMove(column.rows, at, onto)
+        const index = rows.findIndex((other) => other.id === row.id)
+        onEdit((current) => placeLine(current, from, row.line.name, column.key, index))
+        if (landing?.clash) refuse(row.line.name, column.key, landing.key)
+      }
+    }
+    endDrag()
+  }
+
+  /** Says why a line stayed out of a section, and shakes it where it stayed. */
+  function refuse(name: string, stays: string, wanted: string) {
+    const title = sections.find((section) => section.key === wanted)?.title ?? ""
+    toast(sentence(`${name} is already in ${placeName(title, true)}.`))
+    setRefused({ id: lineId(stays, name), at: Date.now() })
+    buzz([12, 60, 12])
+  }
+
+  function endDrag() {
+    setColumns(null)
+    setDragged(null)
+    setLanding(null)
+  }
+
+  // What a screen reader hears. The ids are internal, so the names come from the sections.
+  function spoken(id: UniqueIdentifier): string {
+    const text = String(id)
+    if (text.startsWith("section:")) return `the section ${sectionSpoken(text.slice(8))}`
+    return text.slice(text.indexOf(":") + 1)
+  }
+  function sectionSpoken(key: string): string {
+    const title = sections.find((section) => section.key === key)?.title ?? ""
+    return placeName(title, sections.length > 1)
+  }
+  function placeSpoken(active: UniqueIdentifier, over: Over | null): string {
+    if (!over || String(active).startsWith("section:")) return ""
+    const data = over.data.current
+    if (data?.type === "section") return ` in ${sectionSpoken(data.key)}`
+    const column = columns?.find((each) => each.rows.some((row) => row.id === over.id))
+    return column ? ` in ${sectionSpoken(column.key)}` : ""
+  }
+  const announcements: Announcements = {
+    onDragStart: ({ active }) => `Picked up ${spoken(active.id)}.`,
+    onDragOver: ({ active, over }) =>
+      over
+        ? `${spoken(active.id)} is over ${spoken(over.id)}${placeSpoken(active.id, over)}.`
+        : undefined,
+    onDragEnd: ({ active, over }) =>
+      over
+        ? `Dropped ${spoken(active.id)}${placeSpoken(active.id, over)}.`
+        : `Dropped ${spoken(active.id)} where it was.`,
+    onDragCancel: ({ active }) => `Cancelled. ${spoken(active.id)} stays where it was.`,
+  }
+
+  const quickAdd = (
+    <QuickAdd
+      text={text}
+      onText={setText}
+      target={target ?? { title: "", names: new Set() }}
+      sections={sections}
+      scale={scale}
+      autoFocus={focusAdd}
+      onFocused={onFocused}
+      onAdd={(line) => onEdit((current) => addLine(current, target?.key, line))}
+      onSection={(title) => startSection(title)}
+      onSplit={(line) => startSection(placeholderTitle(sections), [line], true)}
+    />
+  )
+
+  if (sections.length === 0) {
+    return (
+      <div className="flex flex-col gap-3">
         <div className="flex flex-col items-center gap-1 rounded-2xl border border-dashed px-4 pt-5 pb-4 text-center">
           <EmptyArt icons={[WheatIcon, EggsIcon, MilkBottleIcon]} />
           <p className="font-medium">What goes in?</p>
           <p className="max-w-xs text-sm text-pretty text-muted-foreground">
-            Type it the way you would say it: “2 cups flour”, “1/2 tsp salt”, “3 eggs”.
+            Type it the way you would say it: “2 cups flour”, “1/2 tsp salt”, “3 eggs”. A line that
+            ends in a colon, like “Dough:”, starts a section.
           </p>
         </div>
-      ) : (
-        // Capped on a desk, where a wheel scrolls it. On a phone the page scrolls, and a list that
-        // scrolls inside it would catch a thumb that is only trying to get past.
-        <ScrollArea fade="y" className="md:max-h-[32rem]">
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-            <SortableContext
-              items={lines.map((line) => line.name)}
-              strategy={verticalListSortingStrategy}
-            >
-              <ul className="flex flex-col">
-                {lines.map((line) => (
-                  <Line
-                    key={line.name}
-                    line={line}
-                    saved={saved.get(line.name)}
-                    scale={scale}
-                    taken={names}
-                    onChange={(next) =>
-                      onEdit((current) =>
-                        current.map((other) => (other.name === line.name ? next : other)),
-                      )
-                    }
-                    onRemove={() => remove(line)}
-                  />
-                ))}
-              </ul>
-            </SortableContext>
-          </DndContext>
+        {quickAdd}
+      </div>
+    )
+  }
+
+  const list = (
+    <DndContext
+      sensors={sensors}
+      accessibility={{ announcements }}
+      collisionDetection={detect}
+      measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragEnd={onDragEnd}
+      onDragCancel={endDrag}
+    >
+      <SortableContext
+        items={sections.map((section) => `section:${section.key}`)}
+        strategy={verticalListSortingStrategy}
+      >
+        <div className="flex flex-col">
+          {sections.map((section, index) => {
+            const rows = view.find((column) => column.key === section.key)?.rows ?? []
+            return (
+              <Group
+                key={section.key}
+                section={section}
+                sectioned={sectioned}
+                movable={canMove(sections, index, -1) || canMove(sections, index, 1)}
+                empty={rows.length === 0}
+                folded={dragged !== null && "section" in dragged}
+                header={
+                  naming === section.key ? (
+                    <SectionName
+                      title={section.title}
+                      index={index}
+                      sections={sections}
+                      onDone={(title, then) => rename(section.key, title, then)}
+                      onCancel={() => setNaming(null)}
+                    />
+                  ) : (
+                    <SectionHead
+                      section={section}
+                      count={section.lines.length}
+                      landing={landing?.key === section.key ? landing : undefined}
+                      canUp={canMove(sections, index, -1)}
+                      canDown={canMove(sections, index, 1)}
+                      onRename={() => setNaming(section.key)}
+                      onMove={(by) =>
+                        onEdit((current) => moveSection(current, section.key, index + by))
+                      }
+                      onRemove={() => remove(section)}
+                    />
+                  )
+                }
+              >
+                <SortableContext
+                  items={rows.map((row) => row.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <ul className="flex flex-col">
+                    {rows.map((row, at) => (
+                      <Line
+                        key={row.id}
+                        id={row.id}
+                        here={section.key}
+                        line={row.line}
+                        saved={saved.get(row.line.name)}
+                        scale={scale}
+                        places={places}
+                        elsewhere={(partsOf.get(row.line.name) ?? []).filter(
+                          (part) => part.key !== section.key,
+                        )}
+                        canSplit={at > 0 && sections.length < LIMITS.sections}
+                        refusedAt={refused?.id === row.id ? refused.at : undefined}
+                        onSave={(next, to) => saveLine(section.key, row.line.name, next, to)}
+                        onSplit={() => splitAt(section.key, at)}
+                        onRemove={() => removeFrom(section, row.line)}
+                      />
+                    ))}
+                  </ul>
+                </SortableContext>
+                {sectioned &&
+                  (section.key === target?.key ? (
+                    <div className="pt-2">{quickAdd}</div>
+                  ) : (
+                    <AddRow
+                      title={section.title}
+                      onClick={() => {
+                        setActive(section.key)
+                        setFocusAdd(true)
+                      }}
+                    />
+                  ))}
+              </Group>
+            )
+          })}
+        </div>
+      </SortableContext>
+      <DragOverlay>
+        {dragged && <Ghost dragged={dragged} scale={scale} saved={saved} />}
+      </DragOverlay>
+    </DndContext>
+  )
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* One list is capped on a desk, where a wheel scrolls it. On a phone the page scrolls, and a
+          list that scrolls inside it would catch a thumb that is only trying to get past. Sections
+          are not capped either: each has its own field to add to, which must not hide below. */}
+      {wide && !sectioned ? (
+        <ScrollArea fade="y" className="max-h-[32rem]">
+          {list}
         </ScrollArea>
+      ) : (
+        list
       )}
-      <QuickAdd
-        taken={names}
-        scale={scale}
-        onAdd={(line) =>
-          onEdit((current) =>
-            current.some((other) => other.name === line.name) ? current : [...current, line],
-          )
-        }
-      />
+      {!sectioned && quickAdd}
+      <div className="flex items-center gap-2 empty:hidden">
+        {sections.length < LIMITS.sections && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="-ml-2 text-muted-foreground"
+            onClick={() => startSection(placeholderTitle(sections), [], true)}
+          >
+            <HugeiconsIcon icon={Add01Icon} strokeWidth={2} data-icon="inline-start" />
+            Section
+          </Button>
+        )}
+        {/* Worth adding up only when an ingredient goes in more than one section. */}
+        {totals.some(({ parts }) => parts.length > 1) && (
+          <div className="ml-auto">
+            <Totals totals={totals} saved={saved} scale={scale} />
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
-const reveal =
-  "pointer-fine:opacity-0 pointer-fine:transition-opacity pointer-fine:group-hover/line:opacity-100 pointer-fine:focus-visible:opacity-100 pointer-fine:data-popup-open:opacity-100"
+function linesGone(count: number): string | undefined {
+  if (count === 0) return undefined
+  if (count === 1) return "And its ingredient."
+  return `And its ${count} ingredients.`
+}
 
-function Line({
-  line,
-  saved,
-  scale,
-  taken,
-  onChange,
-  onRemove,
+/**
+ * One section: its heading, its lines and a way to add to it. It moves as a whole, and while a
+ * section is dragged every one of them folds to its heading, so they are short to move past.
+ */
+function Group({
+  section,
+  sectioned,
+  movable,
+  empty,
+  folded,
+  header,
+  children,
 }: {
-  line: DraftLine
-  saved?: Saved
-  scale: number
-  taken: Set<string>
-  onChange: (line: DraftLine) => void
-  onRemove: () => void
+  section: DraftSection
+  sectioned: boolean
+  movable: boolean
+  empty: boolean
+  folded: boolean
+  header: ReactNode
+  children: ReactNode
 }) {
   const {
     setNodeRef,
@@ -194,399 +566,276 @@ function Line({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: line.name })
-  const [open, setOpen] = useState(false)
-  const amount = line.quantity * scale
-  const text = `${formatQuantity(amount)}${line.unit ? ` ${unitLabel(line.unit, amount)}` : ""}`
+  } = useSortable({
+    id: `section:${section.key}`,
+    data: { type: "section", key: section.key, empty },
+    disabled: !movable,
+  })
 
   return (
-    <li
+    <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      role={sectioned ? "group" : undefined}
+      aria-label={sectioned ? section.title || "First section" : undefined}
+      className={cn("flex flex-col", isDragging && "opacity-40")}
+    >
+      {sectioned && (
+        <div className="group/head sticky top-0 z-10 flex items-start gap-1 bg-background pt-4 max-md:top-[calc(3.5rem+env(safe-area-inset-top))]">
+          {movable ? (
+            <button
+              type="button"
+              ref={setActivatorNodeRef}
+              {...attributes}
+              {...listeners}
+              aria-label={`Move ${placeName(section.title, true)}`}
+              className={cn(
+                "-ml-1 flex size-8 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 active:cursor-grabbing pointer-coarse:size-10",
+                reveal,
+              )}
+            >
+              <HugeiconsIcon icon={DragDropVerticalIcon} strokeWidth={2} className="size-4" />
+            </button>
+          ) : (
+            <span aria-hidden className="-ml-1 size-8 shrink-0 pointer-coarse:size-10" />
+          )}
+          <div className="min-w-0 flex-1">{header}</div>
+        </div>
+      )}
+      {!folded && children}
+    </div>
+  )
+}
+
+function SectionHead({
+  section,
+  count,
+  landing,
+  canUp,
+  canDown,
+  onRename,
+  onMove,
+  onRemove,
+}: {
+  section: DraftSection
+  count: number
+  /** Set while a dragged line is over this section. Teal if it can go in, red if it can't. */
+  landing?: { clash: boolean }
+  canUp: boolean
+  canDown: boolean
+  onRename: () => void
+  onMove: (by: -1 | 1) => void
+  onRemove: () => void
+}) {
+  const name = placeName(section.title, true)
+  return (
+    <div
       className={cn(
-        "group/line flex items-center gap-2.5 border-b border-border/60 py-2.5 last:border-b-0",
-        isDragging && "relative z-10 rounded-xl border bg-background px-2 shadow-lg select-none",
+        "flex h-8 items-center gap-2 transition-colors pointer-coarse:h-10",
+        landing && (landing.clash ? "text-destructive" : "text-primary"),
       )}
     >
-      <button
-        type="button"
-        ref={setActivatorNodeRef}
-        {...attributes}
-        {...listeners}
-        aria-label={`Move ${line.name}`}
+      <h3 className="-mx-1.5 min-w-0">
+        <button
+          type="button"
+          onClick={onRename}
+          className="block max-w-full truncate rounded-md px-1.5 py-0.5 text-left font-heading text-[0.95rem] font-medium outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          {section.title || (
+            <span className={cn("font-normal", !landing && "text-muted-foreground")}>
+              Name this section
+            </span>
+          )}
+        </button>
+      </h3>
+      <span
+        aria-hidden
         className={cn(
-          "-ml-1 flex size-8 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 active:cursor-grabbing pointer-coarse:size-10",
-          reveal,
+          "h-0 flex-1 border-t transition-colors",
+          !section.title && "border-dashed",
+          landing && "border-current",
         )}
-      >
-        <HugeiconsIcon icon={DragDropVerticalIcon} strokeWidth={2} className="size-4" />
-      </button>
-      <Photo name={line.name} saved={saved} />
+      />
+      <span className="font-heading text-xs text-muted-foreground tabular-nums">
+        {count}
+        <span className="sr-only">{count === 1 ? " ingredient" : " ingredients"}</span>
+      </span>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`More for ${name}`}
+              className={cn("-mr-1 text-muted-foreground", reveal)}
+            />
+          }
+        >
+          <HugeiconsIcon icon={MoreHorizontalIcon} strokeWidth={2} />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-44">
+          <DropdownMenuItem onClick={onRename}>
+            <HugeiconsIcon icon={PencilEdit02Icon} strokeWidth={2} />
+            Rename
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!canUp} onClick={() => onMove(-1)}>
+            <HugeiconsIcon icon={MoveUpIcon} strokeWidth={2} />
+            Move up
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!canDown} onClick={() => onMove(1)}>
+            <HugeiconsIcon icon={MoveDownIcon} strokeWidth={2} />
+            Move down
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem variant="destructive" onClick={onRemove}>
+            <HugeiconsIcon icon={Delete02Icon} strokeWidth={2} />
+            Remove section
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  )
+}
+
+/**
+ * The name of a section, typed where it shows. Enter or a suggestion keeps it and moves on to adding
+ * lines; leaving the field keeps it too, and a name that can't be kept puts the old one back.
+ */
+function SectionName({
+  title,
+  index,
+  sections,
+  onDone,
+  onCancel,
+}: {
+  title: string
+  index: number
+  sections: DraftSection[]
+  onDone: (title: string, then: "stay" | "add") => void
+  onCancel: () => void
+}) {
+  const [value, setValue] = useState(title)
+  const errorId = useId()
+  const problem = titleProblem(value, index, sections)
+  const suggestions = SUGGESTED.filter(
+    (suggestion) => !sections.some((section) => sameTitle(section.title, suggestion)),
+  )
+
+  return (
+    <div className="flex flex-col gap-2 pb-1">
+      <input
+        autoFocus
+        onFocus={(event) => event.currentTarget.select()}
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") onCancel()
+          if (event.key !== "Enter") return
+          event.preventDefault()
+          if (!problem) onDone(value, "add")
+        }}
+        onBlur={() => {
+          if (problem) onCancel()
+          else onDone(value, "stay")
+        }}
+        placeholder={index === 0 ? "No name" : "Name this section"}
+        aria-label="Section name"
+        aria-invalid={problem !== undefined}
+        aria-describedby={errorId}
+        maxLength={LIMITS.sectionTitle}
+        enterKeyHint="done"
+        autoComplete="off"
+        className="h-8 w-full border-b-2 border-primary bg-transparent font-heading text-[0.95rem] font-medium outline-none placeholder:font-normal placeholder:text-muted-foreground pointer-coarse:h-10"
+      />
+      <p id={errorId} className="text-sm text-destructive empty:hidden" aria-live="polite">
+        {value.trim() === title ? undefined : problem}
+      </p>
+      {suggestions.length > 0 && (
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Names to pick">
+          {suggestions.map((suggestion) => (
+            <Button
+              key={suggestion}
+              type="button"
+              variant="outline"
+              size="sm"
+              // Keeps the focus in the field, so its blur does not save before the click picks a name.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => onDone(suggestion, "add")}
+            >
+              {suggestion}
+            </Button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Where a section that is not being added to shows a way to add to it. */
+function AddRow({ title, onClick }: { title: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      // Lined up with the pictures of the lines above it, past the room their handles take.
+      className="group/add flex items-center gap-2.5 rounded-xl py-2 pl-[2.375rem] text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 pointer-coarse:pl-[2.875rem]"
+    >
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-dashed transition-colors group-hover/add:border-primary/60 group-hover/add:text-primary">
+        <HugeiconsIcon icon={Add01Icon} strokeWidth={2} className="size-4" />
+      </span>
+      {title ? `Add to ${title}` : "Add an ingredient"}
+    </button>
+  )
+}
+
+/** What follows the finger or the pointer while something is dragged. */
+function Ghost({
+  dragged,
+  scale,
+  saved,
+}: {
+  dragged: Dragged
+  scale: number
+  saved: Map<string, Saved>
+}) {
+  if ("section" in dragged) {
+    const { section } = dragged
+    return (
+      <div className="flex h-11 items-center gap-2 rounded-xl border bg-background px-3 shadow-lg">
+        <HugeiconsIcon
+          icon={DragDropVerticalIcon}
+          strokeWidth={2}
+          className="size-4 text-muted-foreground"
+        />
+        <span className="truncate font-heading text-[0.95rem] font-medium">{section.title}</span>
+        <span className="ml-auto font-heading text-xs text-muted-foreground tabular-nums">
+          {section.lines.length}
+        </span>
+      </div>
+    )
+  }
+  const { line } = dragged.row
+  const art = ingredientArt(line.name)
+  const photo = saved.get(line.name)?.imageId
+  return (
+    <div className="flex items-center gap-2.5 rounded-xl border bg-background px-2 py-2.5 shadow-lg">
+      <HugeiconsIcon
+        icon={DragDropVerticalIcon}
+        strokeWidth={2}
+        className="size-4 text-muted-foreground"
+      />
+      <Tile
+        src={photo ? `/api/images/${photo}` : undefined}
+        icon={art.known ? art.icon : undefined}
+        hue={art.hue}
+        label={line.name}
+      />
       <span className="min-w-0 flex-1 truncate text-[0.95rem] first-letter:uppercase">
         {line.name}
       </span>
-      <AdaptivePanel
-        open={open}
-        onOpenChange={setOpen}
-        triggerClassName="min-w-[4.5rem] shrink-0 rounded-lg px-2 py-1.5 text-right font-heading text-sm tabular-nums outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 data-popup-open:bg-muted pointer-coarse:py-2.5"
-        triggerLabel={`Change ${line.name}`}
-        trigger={text}
-        title={line.name}
-        description={scale === 1 ? undefined : `Amounts here are shown ×${scale}.`}
-      >
-        <LineForm
-          line={line}
-          saved={saved}
-          scale={scale}
-          taken={taken}
-          onSave={(next) => {
-            onChange(next)
-            setOpen(false)
-          }}
-          onRemove={() => {
-            setOpen(false)
-            onRemove()
-          }}
-        />
-      </AdaptivePanel>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        className={cn("-mr-1 text-muted-foreground", reveal)}
-        aria-label={`Remove ${line.name}`}
-        onClick={onRemove}
-      >
-        <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
-      </Button>
-    </li>
-  )
-}
-
-/** The ingredient's picture: its photo, or an icon from its name. The photo is shared by every recipe. */
-function Photo({ name, saved, className }: { name: string; saved?: Saved; className?: string }) {
-  const input = useRef<HTMLInputElement>(null)
-  const set = useSetIngredientPhoto()
-  const art = ingredientArt(name)
-
-  const tile = (
-    <Tile
-      src={saved?.imageId ? `/api/images/${saved.imageId}` : undefined}
-      icon={art.known ? art.icon : undefined}
-      hue={art.hue}
-      label={name}
-      className={cn("size-10", className)}
-    />
-  )
-  if (!saved) return <span title="Save the recipe to give this ingredient a photo">{tile}</span>
-
-  return (
-    <>
-      <button
-        type="button"
-        className="group/photo relative shrink-0 rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-        aria-label={`Change the photo of ${name}`}
-        onClick={() => input.current?.click()}
-        disabled={set.isPending}
-      >
-        {tile}
-        <span
-          className={cn(
-            "absolute inset-0 flex items-center justify-center rounded-xl bg-black/50 text-white opacity-0 transition-opacity group-hover/photo:opacity-100 group-focus-visible/photo:opacity-100",
-            set.isPending && "opacity-100",
-          )}
-        >
-          {set.isPending ? (
-            <Spinner />
-          ) : (
-            <HugeiconsIcon icon={Camera01Icon} strokeWidth={2} className="size-4" />
-          )}
-        </span>
-      </button>
-      <input
-        ref={input}
-        type="file"
-        accept="image/*"
-        hidden
-        onChange={(event) => {
-          const file = event.target.files?.[0]
-          event.target.value = ""
-          if (!file) return
-          set.mutate(
-            { id: saved.ingredientId, file },
-            {
-              onError: (error) =>
-                toast.error("The photo was not changed", { description: error.message }),
-            },
-          )
-        }}
-      />
-    </>
-  )
-}
-
-/** Why a line cannot take this name, or undefined when it can. `current` is the one it has. */
-function renameProblem(name: string, current: string, taken: Set<string>) {
-  const named = IngredientName.safeParse(name)
-  if (!named.success) return firstProblem(named.error)
-  if (name !== current && taken.has(name)) return `${name} is already in this recipe.`
-  return undefined
-}
-
-function LineForm({
-  line,
-  saved,
-  scale,
-  taken,
-  onSave,
-  onRemove,
-}: {
-  line: DraftLine
-  saved?: Saved
-  scale: number
-  taken: Set<string>
-  onSave: (line: DraftLine) => void
-  onRemove: () => void
-}) {
-  const [name, setName] = useState(line.name)
-  const [quantity, setQuantity] = useState(formatQuantity(line.quantity * scale))
-  const [unit, setUnit] = useState<Unit | null>(line.unit)
-  const nameErrorId = useId()
-
-  // Checked as it is typed, the way the API will check it. The amount says what is wrong with it
-  // under its own field; the name, under this one.
-  const amount = checkQuantity(quantity, scale)
-  const clean = name.trim().toLowerCase()
-  const nameError = renameProblem(clean, line.name, taken)
-  return (
-    <form
-      className="flex flex-col gap-5"
-      onSubmit={(event) => {
-        event.preventDefault()
-        if (amount.value !== undefined && !nameError)
-          onSave({ name: clean, quantity: amount.value, unit })
-      }}
-    >
-      <div className="flex flex-col gap-2">
-        <span className="text-sm font-medium">Ingredient</span>
-        <div className="flex items-center gap-2">
-          {/* Renamed to another ingredient, the photo no longer applies: it shows that one's icon. */}
-          <Photo
-            key={clean === line.name ? "own" : clean}
-            name={clean || "?"}
-            saved={clean === line.name ? saved : undefined}
-            className="size-9 pointer-coarse:size-10"
-          />
-          <Input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            autoComplete="off"
-            aria-label="Ingredient"
-            aria-invalid={nameError !== undefined}
-            aria-describedby={nameErrorId}
-          />
-        </div>
-        <p id={nameErrorId} className="text-sm text-destructive empty:hidden" aria-live="polite">
-          {nameError}
-        </p>
-      </div>
-      <AmountField
-        label="Amount"
-        value={quantity}
-        unit={unit}
-        scale={scale}
-        onChange={setQuantity}
-      />
-      <UnitPicker value={unit} onChange={setUnit} />
-      <div className="flex items-center gap-2 pt-1">
-        <Button
-          type="button"
-          variant="ghost"
-          className="text-destructive hover:text-destructive"
-          onClick={onRemove}
-        >
-          Remove
-        </Button>
-        <Button
-          type="submit"
-          className="ml-auto min-w-24"
-          disabled={amount.value === undefined || nameError !== undefined}
-        >
-          Done
-        </Button>
-      </div>
-    </form>
-  )
-}
-
-/** The line as the recipe would keep it, checked the way the API will check it, or why it can't be. */
-function checkNewLine(
-  parsed: ParsedLine,
-  scale: number,
-  taken: Set<string>,
-): { line: DraftLine; problem?: undefined } | { problem: string } {
-  const name = parsed.name.toLowerCase()
-  if (taken.has(name)) return { problem: `${name} is already in this recipe.` }
-  if (taken.size >= LIMITS.ingredients) {
-    return { problem: `A recipe takes up to ${LIMITS.ingredients} ingredients.` }
-  }
-  const checked = IngredientLine.safeParse({ ...parsed, quantity: unscale(parsed.quantity, scale) })
-  if (!checked.success) return { problem: firstProblem(checked.error) }
-  return { line: { ...checked.data, unit: checked.data.unit ?? null } }
-}
-
-const EXAMPLES = ["2 cups flour", "1/2 tsp salt", "3 eggs", "200 g butter", "1 pinch of sugar"]
-
-/**
- * One field to add an ingredient. Type it the way you would say it and it opens up to show what
- * it understood, with a picture, before you add it.
- */
-function QuickAdd({
-  taken,
-  scale,
-  onAdd,
-}: {
-  taken: Set<string>
-  scale: number
-  onAdd: (line: DraftLine) => void
-}) {
-  const input = useRef<HTMLInputElement>(null)
-  const [text, setText] = useState("")
-  const [example, setExample] = useState(0)
-  const parsed = parseLine(text)
-  const name = parsed?.name.toLowerCase() ?? ""
-  const art = ingredientArt(name)
-  const checked = parsed && checkNewLine(parsed, scale, taken)
-  const problem = checked ? checked.problem : undefined
-
-  // While it is empty, the placeholder walks through a few ways to write one.
-  useEffect(() => {
-    if (text) return
-    const timer = setInterval(() => setExample((current) => (current + 1) % EXAMPLES.length), 3200)
-    return () => clearInterval(timer)
-  }, [text])
-
-  const suggestions = useQuery({
-    ...ingredientOptions(useDebounced(name, 150)),
-    enabled: name !== "",
-  })
-  const options = (suggestions.data?.items ?? [])
-    .filter((item) => item.name !== name && !taken.has(item.name))
-    .slice(0, 12)
-  const loadingOptions = name !== "" && suggestions.isFetching && options.length === 0
-
-  function submit() {
-    if (!checked || checked.problem !== undefined) return
-    onAdd(checked.line)
-    setText("")
-    input.current?.focus()
-  }
-
-  return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault()
-        submit()
-      }}
-      className={cn(
-        "overflow-hidden rounded-2xl border bg-muted/40 transition-[background-color,border-color,box-shadow] focus-within:border-primary/60 focus-within:bg-background focus-within:ring-3 focus-within:ring-primary/15",
-        parsed && "bg-background",
-      )}
-    >
-      <div className="flex items-center gap-3 px-3 py-2.5">
-        {parsed ? (
-          <Tile
-            key={String(art.known) + art.hue}
-            icon={art.known ? art.icon : undefined}
-            hue={art.hue}
-            label={name}
-            className="size-9 animate-in duration-200 zoom-in-75"
-          />
-        ) : (
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-dashed border-primary/50 text-primary">
-            <HugeiconsIcon icon={Add01Icon} strokeWidth={2} className="size-4" />
-          </span>
-        )}
-        <input
-          ref={input}
-          id="quick-add"
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          placeholder={`Add “${EXAMPLES[example]}”…`}
-          aria-label="Add an ingredient"
-          autoComplete="off"
-          enterKeyHint="done"
-          className="h-9 min-w-0 flex-1 truncate bg-transparent text-base outline-none placeholder:text-muted-foreground/70 md:text-sm"
-        />
-        {parsed && !problem && (
-          <Button type="submit" size="sm" className="animate-in duration-150 zoom-in-95 fade-in">
-            Add
-            <Kbd className="hidden bg-primary-foreground/15 text-primary-foreground md:inline-flex">
-              ↵
-            </Kbd>
-          </Button>
-        )}
-      </div>
-
-      {parsed && (
-        <p
-          className={cn(
-            "flex items-center gap-2 border-t border-dashed px-3 py-2 text-sm",
-            problem ? "text-destructive" : "text-muted-foreground",
-          )}
-          aria-live="polite"
-        >
-          {problem ? (
-            <>
-              <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={2} className="size-4 shrink-0" />
-              <span className="min-w-0">{problem}</span>
-            </>
-          ) : (
-            <>
-              <span className="rounded-md bg-primary/12 px-1.5 py-0.5 font-heading text-xs font-medium text-primary tabular-nums">
-                {formatQuantity(parsed.quantity)}
-                {parsed.unit ? ` ${unitLabel(parsed.unit, parsed.quantity)}` : ""}
-              </span>
-              <span className="min-w-0 truncate text-foreground first-letter:uppercase">
-                {name}
-              </span>
-            </>
-          )}
-        </p>
-      )}
-
-      {(options.length > 0 || loadingOptions) && (
-        <div
-          className="border-t border-dashed px-3 pt-2"
-          role="group"
-          aria-label="Ingredients you already use"
-        >
-          <ScrollArea orientation="horizontal" fade="x">
-            <div className="flex gap-1.5 pb-2.5" aria-busy={loadingOptions}>
-              {loadingOptions
-                ? Array.from({ length: 4 }, (_, i) => (
-                    <Skeleton key={i} className="h-7 w-20 shrink-0 rounded-lg pointer-coarse:h-9" />
-                  ))
-                : options.map((item) => (
-                    <Button
-                      key={item.id}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="shrink-0"
-                      onClick={() => {
-                        // Keep the amount and the unit, and swap in the name that was suggested.
-                        const at = text.toLowerCase().lastIndexOf(name)
-                        setText(`${text.slice(0, at)}${item.name}`)
-                        input.current?.focus()
-                      }}
-                    >
-                      {item.name}
-                    </Button>
-                  ))}
-            </div>
-          </ScrollArea>
-        </div>
-      )}
-    </form>
+      <span className="px-2 font-heading text-sm tabular-nums">
+        {formatAmount(line.quantity * scale, line.unit)}
+      </span>
+    </div>
   )
 }

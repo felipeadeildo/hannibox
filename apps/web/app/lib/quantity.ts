@@ -114,6 +114,20 @@ const LABELS = {
 
 export const unitLabel = (unit: Unit, quantity = 1) => LABELS[unit][quantity > 1 ? 1 : 0]
 
+/** "60 g", "2 cups", or just "3" for things that are counted. */
+export function formatAmount(quantity: number, unit: Unit | null): string {
+  return unit
+    ? `${formatQuantity(quantity)} ${unitLabel(unit, quantity)}`
+    : formatQuantity(quantity)
+}
+
+/** Amounts added up by unit: "595 g", or "60 g + ½ cup" across two units. */
+export function formatTotal(amounts: { quantity: number; unit: Unit | null }[], scale = 1): string {
+  const byUnit = new Map<Unit | null, number>()
+  for (const { quantity, unit } of amounts) byUnit.set(unit, (byUnit.get(unit) ?? 0) + quantity)
+  return [...byUnit].map(([unit, quantity]) => formatAmount(quantity * scale, unit)).join(" + ")
+}
+
 export type ParsedLine = { quantity: number; unit: Unit | null; name: string }
 
 /**

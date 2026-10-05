@@ -24,6 +24,7 @@ import { isLocalId, useDrafts } from "~/lib/drafts"
 import { longDate, shortDate } from "~/lib/format"
 import { recipeOptions, type TreeData } from "~/lib/recipes"
 import { type Row, layoutTree, lineageOf } from "~/lib/tree"
+import { namesOf } from "~/lib/sections"
 
 const ROW = 64
 const INDENT = 24
@@ -341,17 +342,15 @@ function Node({
 function Preview({ id, enabled }: { id: string; enabled: boolean }) {
   const recipe = useQuery({ ...recipeOptions(id), enabled })
   if (!recipe.data) return <Skeleton className="h-16 w-full" />
-  const { title, ingredients, content } = recipe.data
+  const { title, sections, content } = recipe.data
+  const ingredients = namesOf(sections)
 
   return (
     <div className="flex flex-col gap-2 text-sm">
       <p className="font-medium">{title}</p>
       {ingredients.length > 0 && (
         <p className="text-muted-foreground">
-          {ingredients
-            .slice(0, 5)
-            .map((line) => line.name)
-            .join(", ")}
+          {ingredients.slice(0, 5).join(", ")}
           {ingredients.length > 5 && ` and ${ingredients.length - 5} more`}
         </p>
       )}

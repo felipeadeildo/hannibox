@@ -10,6 +10,7 @@ import {
   real,
   sqliteTable,
   text,
+  uniqueIndex,
 } from "drizzle-orm/sqlite-core"
 
 import { user } from "./auth"
@@ -62,22 +63,43 @@ export const ingredient = sqliteTable("ingredient", {
   name: text("name").notNull().unique(),
 })
 
-// A null unit counts things: "2 eggs".
-export const recipeIngredient = sqliteTable(
-  "recipe_ingredient",
+// A recipe's ingredients come in sections, like "For the poolish" and "For the dough". A list with
+// no headings is one section without a title. Only the first can go without one, because further
+// down its lines would read as part of the section above.
+export const recipeSection = sqliteTable(
+  "recipe_section",
   {
+    id: text("id").primaryKey(),
     recipeId: text("recipe_id")
       .notNull()
       .references(() => recipe.id, { onDelete: "cascade" }),
+    title: text("title"),
+    position: integer("position").notNull(),
+  },
+  (table) => [
+    uniqueIndex("recipe_section_recipe_id_position_unique").on(table.recipeId, table.position),
+    uniqueIndex("recipe_section_recipe_id_title_unique").on(table.recipeId, table.title),
+    check("recipe_section_title_check", sql`${table.title} is not null or ${table.position} = 0`),
+  ],
+)
+
+// The same ingredient can be in two sections, flour in the poolish and in the dough, but only once
+// in each. A null unit counts things: "2 eggs".
+export const recipeIngredient = sqliteTable(
+  "recipe_ingredient",
+  {
+    sectionId: text("section_id")
+      .notNull()
+      .references(() => recipeSection.id, { onDelete: "cascade" }),
     ingredientId: text("ingredient_id")
       .notNull()
       .references(() => ingredient.id, { onDelete: "restrict" }),
     quantity: real("quantity").notNull(),
     unit: text("unit", { enum: UNITS }),
-    position: integer("position").notNull().default(0),
+    position: integer("position").notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.recipeId, table.ingredientId] }),
+    primaryKey({ columns: [table.sectionId, table.ingredientId] }),
     index("recipe_ingredient_ingredient_id_idx").on(table.ingredientId),
   ],
 )
@@ -108,17 +130,25 @@ export const recipeRelations = relations(recipe, ({ one, many }) => ({
     relationName: "variations",
   }),
   variations: many(recipe, { relationName: "variations" }),
-  ingredients: many(recipeIngredient),
+  sections: many(recipeSection),
   images: many(image),
 }))
 
 export const ingredientRelations = relations(ingredient, ({ many }) => ({
-  recipes: many(recipeIngredient),
+  lines: many(recipeIngredient),
   images: many(image),
 }))
 
+export const recipeSectionRelations = relations(recipeSection, ({ one, many }) => ({
+  recipe: one(recipe, { fields: [recipeSection.recipeId], references: [recipe.id] }),
+  lines: many(recipeIngredient),
+}))
+
 export const recipeIngredientRelations = relations(recipeIngredient, ({ one }) => ({
-  recipe: one(recipe, { fields: [recipeIngredient.recipeId], references: [recipe.id] }),
+  section: one(recipeSection, {
+    fields: [recipeIngredient.sectionId],
+    references: [recipeSection.id],
+  }),
   ingredient: one(ingredient, {
     fields: [recipeIngredient.ingredientId],
     references: [ingredient.id],

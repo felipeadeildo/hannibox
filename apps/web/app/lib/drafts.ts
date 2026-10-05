@@ -9,13 +9,21 @@ import type { RecipeDetail, RecipeFields } from "./recipes"
 
 const Line = z.object({ name: z.string(), quantity: z.number(), unit: Unit.nullable() })
 
-const Draft = z.object({
+const Section = z.object({
+  // Tells sections apart on this device while one is renamed or moved. It is never sent.
+  key: z.string(),
+  // Empty for a section without a name, which only the first one can be.
+  title: z.string(),
+  lines: z.array(Line),
+})
+
+const Fields = z.object({
   title: z.string(),
   content: z.string(),
   source: z.string(),
   yield: z.number().nullable(),
   yieldUnit: Unit.nullable(),
-  ingredients: z.array(Line),
+  sections: z.array(Section),
   // The photos of the saved recipe that this version leaves out. Nothing is deleted until it is saved.
   removedImages: z.array(z.string()).default([]),
   // Photos added here. They live on this device until the draft is saved, and belong to no recipe.
@@ -24,7 +32,20 @@ const Draft = z.object({
     .default([]),
   touchedAt: z.number(),
 })
-export type Draft = z.infer<typeof Draft>
+
+// A draft kept from before sections has one flat list of lines. It opens as one section without a
+// name, so nothing typed into it is lost.
+const Draft = z.preprocess(fromFlatList, Fields)
+
+function fromFlatList(value: unknown): unknown {
+  if (typeof value !== "object" || value === null || !("ingredients" in value)) return value
+  const { ingredients, ...rest } = value
+  const lines = Array.isArray(ingredients) ? ingredients : []
+  return { ...rest, sections: lines.length > 0 ? [{ key: "s0", title: "", lines }] : [] }
+}
+
+export type Draft = z.infer<typeof Fields>
+export type DraftSection = z.infer<typeof Section>
 export type DraftLine = z.infer<typeof Line>
 
 /** A draft of a recipe that does not exist yet. Its id never reaches the API. */
@@ -38,7 +59,7 @@ export const emptyDraft = (): Draft => ({
   source: "",
   yield: null,
   yieldUnit: null,
-  ingredients: [],
+  sections: [],
   removedImages: [],
   addedImages: [],
   touchedAt: 0,
@@ -50,7 +71,11 @@ export const draftOf = (recipe: RecipeDetail): Draft => ({
   source: recipe.source ?? "",
   yield: recipe.yield,
   yieldUnit: recipe.yieldUnit,
-  ingredients: recipe.ingredients.map(({ name, quantity, unit }) => ({ name, quantity, unit })),
+  sections: recipe.sections.map(({ title, lines }, index) => ({
+    key: `s${index}`,
+    title: title ?? "",
+    lines: lines.map(({ name, quantity, unit }) => ({ name, quantity, unit })),
+  })),
   removedImages: [],
   addedImages: [],
   touchedAt: 0,
@@ -66,7 +91,7 @@ export const fieldsOf = (draft: Draft, base?: RecipeDetail): RecipeFields & { ti
   source: draft.source.trim() || null,
   yield: draft.yield,
   yieldUnit: draft.yield === null ? null : draft.yieldUnit,
-  ingredients: draft.ingredients,
+  sections: draft.sections.map(({ title, lines }) => ({ title: title || null, lines })),
   ...(base && draft.removedImages.length > 0
     ? {
         images: base.images
@@ -83,7 +108,7 @@ const same = (a: Draft, b: Draft) =>
     a.source,
     a.yield,
     a.yieldUnit,
-    a.ingredients,
+    a.sections.map(({ title, lines }) => [title, lines]),
     a.removedImages,
     a.addedImages.map((photo) => photo.id),
   ]) ===
@@ -93,7 +118,7 @@ const same = (a: Draft, b: Draft) =>
     b.source,
     b.yield,
     b.yieldUnit,
-    b.ingredients,
+    b.sections.map(({ title, lines }) => [title, lines]),
     b.removedImages,
     b.addedImages.map((photo) => photo.id),
   ])
