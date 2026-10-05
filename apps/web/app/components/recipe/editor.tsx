@@ -25,7 +25,7 @@ import { DeleteRecipeDialog, type DoomedRecipe } from "~/components/app/delete-r
 import { DraftPill } from "~/components/app/draft-pill"
 import { AmountField, UnitPicker } from "~/components/recipe/amount-fields"
 import { Cover } from "~/components/recipe/cover"
-import { Ingredients, type EditLines } from "~/components/recipe/ingredients"
+import { type EditSections, Ingredients } from "~/components/recipe/ingredients"
 import { PhotoViewer } from "~/components/recipe/photo-viewer"
 import { type Photo, Photos } from "~/components/recipe/photos"
 import { type SaveKind, SaveBar } from "~/components/recipe/save-bar"
@@ -60,6 +60,7 @@ import { shrinkImage } from "~/lib/image"
 import { keepPhoto, loadPhoto, usePhotoSources } from "~/lib/pending-photos"
 import { checkQuantity, formatQuantity, unitLabel } from "~/lib/quantity"
 import { messageOf } from "~/lib/query"
+import { namesOf } from "~/lib/sections"
 import {
   type RecipeDetail,
   type SaveMode,
@@ -167,8 +168,8 @@ export function RecipeEditor({ id, base }: { id: string; base?: RecipeDetail }) 
     })
   }
 
-  const edit: EditLines = (change) =>
-    update((current) => ({ ingredients: change(current.ingredients) }))
+  const edit: EditSections = (change) =>
+    update((current) => ({ sections: change(current.sections) }))
 
   async function run(kind: SaveKind) {
     const fields = fieldsOf(working, base)
@@ -289,7 +290,7 @@ export function RecipeEditor({ id, base }: { id: string; base?: RecipeDetail }) 
           id="ingredients"
           icon={ShoppingBasket01Icon}
           title="Ingredients"
-          count={working.ingredients.length}
+          count={namesOf(working.sections).length}
           note={
             scale !== 1 && (
               <span className="rounded-md bg-primary/12 px-1.5 py-0.5 font-heading text-xs font-medium text-primary">
@@ -313,7 +314,7 @@ export function RecipeEditor({ id, base }: { id: string; base?: RecipeDetail }) 
             ))}
           </ToggleGroup>
         </SectionTitle>
-        <Ingredients lines={working.ingredients} base={base} scale={scale} onEdit={edit} />
+        <Ingredients sections={working.sections} base={base} scale={scale} onEdit={edit} />
       </section>
 
       <section className="flex flex-col gap-4" aria-labelledby="steps">
