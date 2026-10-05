@@ -6,11 +6,16 @@ import { z } from "zod"
  */
 export type ApiError = { error: string; issues?: { path: string; message: string }[] }
 
+/** The first thing wrong with a refused value, in the words its schema gives it. */
+export function firstProblem(error: z.core.$ZodError): string {
+  return error.issues[0]?.message ?? "That is not valid"
+}
+
 /** A refused value as an `ApiError`: its first problem up front, and every problem by field. */
 export function invalid(error: z.core.$ZodError): ApiError {
   const issues = error.issues.map((issue) => ({
     path: z.core.toDotPath(issue.path),
     message: issue.message,
   }))
-  return { error: issues[0]?.message ?? "That is not valid", issues }
+  return { error: firstProblem(error), issues }
 }

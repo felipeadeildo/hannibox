@@ -27,7 +27,7 @@ import {
   WheatIcon,
 } from "@hugeicons/core-free-icons"
 import { useQuery } from "@tanstack/react-query"
-import { IngredientLine, IngredientName, LIMITS, type Unit } from "@hannibox/shared"
+import { IngredientLine, IngredientName, LIMITS, type Unit, firstProblem } from "@hannibox/shared"
 import { cn } from "cn"
 import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -45,7 +45,14 @@ import { Spinner } from "~/components/ui/spinner"
 import { useDebounced } from "~/hooks/use-debounced"
 import { ingredientArt } from "~/lib/art"
 import type { DraftLine } from "~/lib/drafts"
-import { checkQuantity, formatQuantity, parseLine, unitLabel, unscale } from "~/lib/quantity"
+import {
+  type ParsedLine,
+  checkQuantity,
+  formatQuantity,
+  parseLine,
+  unitLabel,
+  unscale,
+} from "~/lib/quantity"
 import { type RecipeDetail, ingredientOptions, useSetIngredientPhoto } from "~/lib/recipes"
 
 /** Changes the list as it is when the change runs, so a late Undo cannot undo more than it should. */
@@ -317,6 +324,14 @@ function Photo({ name, saved, className }: { name: string; saved?: Saved; classN
   )
 }
 
+/** Why a line cannot take this name, or undefined when it can. `current` is the one it has. */
+function renameProblem(name: string, current: string, taken: Set<string>) {
+  const named = IngredientName.safeParse(name)
+  if (!named.success) return firstProblem(named.error)
+  if (name !== current && taken.has(name)) return `${name} is already in this recipe.`
+  return undefined
+}
+
 function LineForm({
   line,
   saved,
@@ -340,13 +355,8 @@ function LineForm({
   // Checked as it is typed, the way the API will check it. The amount says what is wrong with it
   // under its own field; the name, under this one.
   const amount = checkQuantity(quantity, scale)
-  const named = IngredientName.safeParse(name)
-  const clean = named.success ? named.data : name.trim().toLowerCase()
-  const nameError = !named.success
-    ? named.error.issues[0]?.message
-    : clean !== line.name && taken.has(clean)
-      ? `${clean} is already in this recipe.`
-      : undefined
+  const clean = name.trim().toLowerCase()
+  const nameError = renameProblem(clean, line.name, taken)
   return (
     <form
       className="flex flex-col gap-5"
@@ -408,6 +418,22 @@ function LineForm({
   )
 }
 
+/** The line as the recipe would keep it, checked the way the API will check it, or why it can't be. */
+function checkNewLine(
+  parsed: ParsedLine,
+  scale: number,
+  taken: Set<string>,
+): { line: DraftLine; problem?: undefined } | { problem: string } {
+  const name = parsed.name.toLowerCase()
+  if (taken.has(name)) return { problem: `${name} is already in this recipe.` }
+  if (taken.size >= LIMITS.ingredients) {
+    return { problem: `A recipe takes up to ${LIMITS.ingredients} ingredients.` }
+  }
+  const checked = IngredientLine.safeParse({ ...parsed, quantity: unscale(parsed.quantity, scale) })
+  if (!checked.success) return { problem: firstProblem(checked.error) }
+  return { line: { ...checked.data, unit: checked.data.unit ?? null } }
+}
+
 const EXAMPLES = ["2 cups flour", "1/2 tsp salt", "3 eggs", "200 g butter", "1 pinch of sugar"]
 
 /**
@@ -429,18 +455,8 @@ function QuickAdd({
   const parsed = parseLine(text)
   const name = parsed?.name.toLowerCase() ?? ""
   const art = ingredientArt(name)
-  // The line as the recipe would keep it, checked the way the API will check it.
-  const line =
-    parsed && IngredientLine.safeParse({ ...parsed, quantity: unscale(parsed.quantity, scale) })
-  const problem = !line
-    ? undefined
-    : taken.has(name)
-      ? `${name} is already in this recipe.`
-      : taken.size >= LIMITS.ingredients
-        ? `A recipe takes up to ${LIMITS.ingredients} ingredients.`
-        : line.success
-          ? undefined
-          : line.error.issues[0]?.message
+  const checked = parsed && checkNewLine(parsed, scale, taken)
+  const problem = checked ? checked.problem : undefined
 
   // While it is empty, the placeholder walks through a few ways to write one.
   useEffect(() => {
@@ -459,8 +475,8 @@ function QuickAdd({
   const loadingOptions = name !== "" && suggestions.isFetching && options.length === 0
 
   function submit() {
-    if (!line?.success || problem) return
-    onAdd({ ...line.data, unit: line.data.unit ?? null })
+    if (!checked || checked.problem !== undefined) return
+    onAdd(checked.line)
     setText("")
     input.current?.focus()
   }

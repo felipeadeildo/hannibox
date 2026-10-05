@@ -1,6 +1,6 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter"
 import { schema } from "@hannibox/db"
-import { AccountName, PASSWORD } from "@hannibox/shared"
+import { AccountName, PASSWORD, firstProblem } from "@hannibox/shared"
 import { type BetterAuthOptions, betterAuth } from "better-auth/minimal"
 import { APIError, createAuthMiddleware } from "better-auth/api"
 
@@ -17,10 +17,7 @@ const checkName = createAuthMiddleware(async (ctx) => {
   if (ctx.path !== "/sign-up/email") return
   const name = AccountName.safeParse(ctx.body?.name)
   if (!name.success) {
-    throw APIError.from("BAD_REQUEST", {
-      code: "INVALID_NAME",
-      message: name.error.issues[0]?.message ?? "Tell us your name",
-    })
+    throw APIError.from("BAD_REQUEST", { code: "INVALID_NAME", message: firstProblem(name.error) })
   }
   return { context: { body: { ...ctx.body, name: name.data } } }
 })

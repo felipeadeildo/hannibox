@@ -1,4 +1,4 @@
-import { Quantity, UNITS, type Unit } from "@hannibox/shared"
+import { Quantity, UNITS, type Unit, firstProblem } from "@hannibox/shared"
 
 const GLYPHS: Record<string, number> = {
   "⅛": 1 / 8,
@@ -54,9 +54,7 @@ export type Checked = { value: number; error?: undefined } | { value?: undefined
 /** A number as an amount the API takes, or what is wrong with it, in words to show. */
 export function checkAmount(value: number | null): Checked {
   const checked = Quantity.safeParse(value)
-  return checked.success
-    ? { value: checked.data }
-    : { error: checked.error.issues[0]?.message ?? "That is not an amount" }
+  return checked.success ? { value: checked.data } : { error: firstProblem(checked.error) }
 }
 
 /**

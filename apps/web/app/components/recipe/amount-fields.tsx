@@ -49,11 +49,12 @@ export function AmountField({
   const errorId = useId()
   const step = stepFor(unit)
   const { error } = checkQuantity(value, scale)
-  const amount = error ? null : parseQuantity(value)
+  // The amount as it is shown, at the scale it is shown at, for the buttons to start from.
+  const shown = error ? null : parseQuantity(value)
   const problem = optional && value.trim() === "" ? undefined : error
 
   function nudge(direction: 1 | -1) {
-    const next = Math.round(((amount ?? 0) + direction * step) * 100) / 100
+    const next = Math.round(((shown ?? 0) + direction * step) * 100) / 100
     onChange(formatQuantity(Math.min(LIMITS.quantity, Math.max(step, next))))
   }
 
@@ -99,7 +100,7 @@ export function AmountField({
           <Button
             key={option}
             type="button"
-            variant={amount === option ? "default" : "secondary"}
+            variant={shown === option ? "default" : "secondary"}
             size="sm"
             onClick={() => onChange(formatQuantity(option))}
           >

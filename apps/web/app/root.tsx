@@ -90,15 +90,27 @@ export default function App() {
   )
 }
 
-/** What reaches here broke a whole page. An API failure says why in words meant to be shown. */
+/** What to say about an error that broke a whole page. An API failure says why in its own words. */
+function explain(error: unknown) {
+  if (isRouteErrorResponse(error) && error.status === 404) {
+    return {
+      missing: true,
+      title: "This page is not here",
+      details: "The address may be wrong, or the page was taken down.",
+    }
+  }
+  if (error instanceof ApiFailure) {
+    return { missing: false, title: "Something went wrong", details: error.message }
+  }
+  return {
+    missing: false,
+    title: "Something went wrong",
+    details: "It was not you. Try again, and if it keeps happening, come back in a little while.",
+  }
+}
+
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  const missing = isRouteErrorResponse(error) && error.status === 404
-  const title = missing ? "This page is not here" : "Something went wrong"
-  const details = missing
-    ? "The address may be wrong, or the page was taken down."
-    : error instanceof ApiFailure
-      ? error.message
-      : "It was not you. Try again, and if it keeps happening, come back in a little while."
+  const { missing, title, details } = explain(error)
   const stack = import.meta.env.DEV && error instanceof Error ? error.stack : undefined
 
   return (

@@ -17,9 +17,13 @@ const Photos = z.union([z.instanceof(File), z.array(z.instanceof(File))]).option
  */
 export const SaveForm = z.object({ data: z.string(), photos: Photos })
 
-export type Save<T> =
-  | { ok: true; data: T; photos: File[] }
-  | { ok: false; status: 400 | 413 | 415; body: ApiError }
+type Refusal = { ok: false; status: 400 | 413 | 415; body: ApiError }
+
+export type Save<T> = { ok: true; data: T; photos: File[] } | Refusal
+
+function refuse(status: Refusal["status"], body: ApiError): Refusal {
+  return { ok: false, status, body }
+}
 
 export function readSave<S extends z.ZodType>(
   schema: S,
@@ -29,34 +33,22 @@ export function readSave<S extends z.ZodType>(
   try {
     json = JSON.parse(form.data)
   } catch {
-    return { ok: false, status: 400, body: { error: "`data` is not valid JSON" } }
+    return refuse(400, { error: "`data` is not valid JSON" })
   }
   const parsed = schema.safeParse(json)
-  if (!parsed.success) return { ok: false, status: 400, body: invalid(parsed.error) }
+  if (!parsed.success) return refuse(400, invalid(parsed.error))
 
   const photos =
     form.photos === undefined ? [] : Array.isArray(form.photos) ? form.photos : [form.photos]
   if (photos.length > MAX_PHOTOS) {
-    return {
-      ok: false,
-      status: 413,
-      body: { error: `A save takes at most ${MAX_PHOTOS} new photos` },
-    }
+    return refuse(413, { error: `A save takes at most ${MAX_PHOTOS} new photos` })
   }
   for (const photo of photos) {
     if (!isImageType(photo.type)) {
-      return {
-        ok: false,
-        status: 415,
-        body: { error: `A photo has to be a ${IMAGE_TYPE_NAMES}` },
-      }
+      return refuse(415, { error: `A photo has to be a ${IMAGE_TYPE_NAMES}` })
     }
     if (photo.size > MAX_IMAGE_BYTES) {
-      return {
-        ok: false,
-        status: 413,
-        body: { error: `A photo has to be under ${MAX_IMAGE_BYTES / 1_000_000} MB` },
-      }
+      return refuse(413, { error: `A photo has to be under ${MAX_IMAGE_BYTES / 1_000_000} MB` })
     }
   }
   return { ok: true, data: parsed.data, photos }
