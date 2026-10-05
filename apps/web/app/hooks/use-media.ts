@@ -1,6 +1,5 @@
 import { useSyncExternalStore } from "react"
 
-/** Whether a media query matches, and it keeps up as the window changes. */
 export function useMedia(query: string) {
   return useSyncExternalStore(
     (notify) => {

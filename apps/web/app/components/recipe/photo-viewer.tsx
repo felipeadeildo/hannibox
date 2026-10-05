@@ -5,7 +5,6 @@ import { useRef } from "react"
 import { Button } from "~/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "~/components/ui/dialog"
 
-/** The recipe's photos full screen. Arrows, the keyboard and a swipe all move between them. */
 export function PhotoViewer({
   images,
   index,

@@ -4,7 +4,6 @@ import { Moon02Icon, Sun03Icon } from "@hugeicons/core-free-icons"
 import { Button } from "~/components/ui/button"
 import { useTheme } from "~/lib/theme"
 
-/** One tap between light and dark. The three-way choice, with System, is in the account menu. */
 export function ThemeToggle() {
   const { resolved, setTheme } = useTheme()
   const next = resolved === "dark" ? "light" : "dark"

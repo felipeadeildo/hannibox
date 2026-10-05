@@ -2,10 +2,8 @@ const dayMonth = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-di
 const long = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short" })
 const relative = new Intl.RelativeTimeFormat("en", { numeric: "auto" })
 
-/** 04/10: the way the list shows a date. */
 export const shortDate = (iso: string) => dayMonth.format(new Date(iso))
 
-/** 4 Oct 2026, 21:03: for a tooltip. */
 export const longDate = (iso: string) => long.format(new Date(iso))
 
 const STEPS = [

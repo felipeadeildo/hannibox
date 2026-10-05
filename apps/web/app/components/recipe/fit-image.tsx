@@ -1,10 +1,7 @@
 import { cn } from "cn"
 import type { ImgHTMLAttributes } from "react"
 
-/**
- * A photo shown whole. What it leaves empty at the sides is the same photo, blurred, so a tall
- * photo and a wide one both fill their box without cutting anything off.
- */
+/** Shown whole. The empty sides are the same photo, blurred. */
 export function FitImage({
   src,
   alt,

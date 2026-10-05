@@ -28,7 +28,6 @@ const INDENT = 24
 const PAD = 24
 const CURVE = 14
 
-/** The versions of a recipe as a tree, with the one you are on lit from the original down to it. */
 export function TreeSheet({
   open,
   onOpenChange,
@@ -337,7 +336,6 @@ function Node({
   )
 }
 
-/** A glance at a version, for a mouse. A phone just opens it. */
 function Preview({ id, enabled }: { id: string; enabled: boolean }) {
   const recipe = useQuery({ ...recipeOptions(id), enabled })
   if (!recipe.data) return <Skeleton className="h-16 w-full" />

@@ -1,7 +1,6 @@
 import { Tile } from "~/components/app/tile"
 import type { Icon } from "~/lib/art"
 
-/** Three tiles, the one in the middle the one that matters: what an empty screen shows instead of nothing. */
 export function EmptyArt({ icons }: { icons: [Icon, Icon, Icon] }) {
   const [left, middle, right] = icons
   return (

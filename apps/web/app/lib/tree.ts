@@ -10,7 +10,6 @@ export type Row = {
   depth: number
   /** The index of the row above it in the tree, null for the original. */
   parent: number | null
-  /** How many versions were made from it. */
   versions: number
   kind: "saved" | "draft" | "hint"
 }
@@ -74,7 +73,6 @@ export function layoutTree(
   return rows
 }
 
-/** The ids from the original down to `id`: the path the tree lights up. */
 export function lineageOf(nodes: TreeNode[], id: string) {
   const parents = new Map(nodes.map((node) => [node.id, node.parentId]))
   const path: string[] = []

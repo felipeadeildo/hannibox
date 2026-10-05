@@ -7,8 +7,8 @@ function toBlob(canvas: HTMLCanvasElement, quality: number) {
 }
 
 /**
- * Makes a photo fit what the API takes. The database keeps images in a row that stops at 2 MB,
- * so a phone photo is scaled down here and saved as WebP. A small one goes as it is.
+ * Scales a photo down and saves it as WebP, because the database keeps images in rows that stop at
+ * 2 MB. A small one goes as it is.
  */
 export async function shrinkImage(file: File) {
   if (isImageType(file.type) && file.size <= MAX_IMAGE_BYTES / 2) return file

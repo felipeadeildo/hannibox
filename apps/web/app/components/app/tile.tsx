@@ -5,7 +5,6 @@ import type { CSSProperties } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar"
 import type { Icon } from "~/lib/art"
 
-/** A small square for a recipe or an ingredient: its photo, else an icon or an initial on a colour. */
 export function Tile({
   src,
   icon,

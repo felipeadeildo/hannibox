@@ -25,7 +25,6 @@ function apply(theme: Theme) {
     ?.setAttribute("content", resolved === "dark" ? "#0a0a0a" : "#ffffff")
 }
 
-// "System" follows the OS, also when it changes while the tab is open.
 dark?.addEventListener("change", () => {
   apply(read())
   notify()

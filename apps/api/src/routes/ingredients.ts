@@ -13,7 +13,6 @@ const { ingredient } = schema
 
 export default new Hono<UserEnv>()
   .use(requireUser)
-  // For autocomplete: the first 20 names that contain `q`.
   .get("/", validate("query", FindIngredients), async (c) => {
     const { q } = c.req.valid("query")
     const rows = await c.get("db").query.ingredient.findMany({

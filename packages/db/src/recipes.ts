@@ -43,7 +43,6 @@ export const recipe = sqliteTable(
     }),
     title: text("title").notNull(),
     source: text("source"),
-    // The steps, in plain text for now.
     content: text("content").notNull().default(""),
     yield: real("yield"),
     yieldUnit: text("yield_unit", { enum: UNITS }),
@@ -63,7 +62,7 @@ export const ingredient = sqliteTable("ingredient", {
   name: text("name").notNull().unique(),
 })
 
-// A null unit counts things: "2 eggs". `position` is the order the list is written in.
+// A null unit counts things: "2 eggs".
 export const recipeIngredient = sqliteTable(
   "recipe_ingredient",
   {

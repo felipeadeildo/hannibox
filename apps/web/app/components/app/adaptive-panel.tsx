@@ -12,8 +12,8 @@ import {
 import { useMedia } from "~/hooks/use-media"
 
 /**
- * A small panel for editing one thing. It is a popover beside the trigger with a mouse, and a
- * sheet from the bottom on a phone, where a popover would cover the list and be hard to reach.
+ * A popover beside the trigger with a mouse, and a sheet from the bottom on a phone, where a
+ * popover would be hard to reach.
  */
 export function AdaptivePanel({
   open,

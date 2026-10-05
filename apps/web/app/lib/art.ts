@@ -23,7 +23,6 @@ export type Icon = typeof ChefHatIcon
 
 type Art = { icon: Icon; hue: number }
 
-// Hues that sit well together on a white page and on a dark one.
 const HUES = [25, 55, 85, 150, 185, 235, 285, 340]
 
 function hueOf(text: string) {
@@ -67,7 +66,6 @@ export const ingredientArt = (name: string): Art & { known: boolean } => {
   return found ? { ...found, known: true } : { icon: ChefHatIcon, hue: hueOf(name), known: false }
 }
 
-/** The picture for a recipe without a photo. */
 export const recipeArt = (title: string): Art => {
   const found = lookup(RECIPES, title.toLowerCase())
   return found ?? { icon: ChefHatIcon, hue: hueOf(title) }

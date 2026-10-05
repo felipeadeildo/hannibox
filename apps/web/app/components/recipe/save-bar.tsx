@@ -28,7 +28,6 @@ export function SaveBar({
   onDiscard,
 }: {
   visible: boolean
-  /** The recipe exists on the server. Otherwise saving creates it. */
   saved: boolean
   saving: boolean
   /** How many photos overwriting would delete for good: the ones this draft leaves out. */

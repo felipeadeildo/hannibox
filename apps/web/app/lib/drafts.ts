@@ -4,8 +4,8 @@ import { z } from "zod"
 
 import type { RecipeDetail, RecipeFields } from "./recipes"
 
-// An edit is never sent as you type. It lives here, on this device, as a draft of the recipe
-// you are looking at, and saving it is what makes a new version in the tree.
+// An edit is never sent as you type. It stays on this device as a draft, and saving it makes a new
+// version.
 
 const Line = z.object({ name: z.string(), quantity: z.number(), unit: Unit.nullable() })
 
@@ -58,7 +58,7 @@ export const draftOf = (recipe: RecipeDetail): Draft => ({
 
 /**
  * The draft as the API takes it. The photos that stay are named only when some were left out;
- * otherwise they are not mentioned, and every photo stays as it is.
+ * otherwise every photo stays.
  */
 export const fieldsOf = (draft: Draft, base?: RecipeDetail): RecipeFields & { title: string } => ({
   title: draft.title.trim(),
@@ -98,8 +98,6 @@ const same = (a: Draft, b: Draft) =>
     b.addedImages.map((photo) => photo.id),
   ])
 
-// ---- storage: one entry per user and recipe, kept in step across tabs
-
 const listeners = new Set<() => void>()
 const notify = () => listeners.forEach((listener) => listener())
 if (typeof window !== "undefined") window.addEventListener("storage", notify)
@@ -131,7 +129,6 @@ function store(userId: string, id: string, draft: Draft | null) {
   notify()
 }
 
-/** Every draft of this user, by recipe id. */
 export function useDrafts(userId: string) {
   const snapshot = useSyncExternalStore(
     subscribe,
@@ -158,8 +155,8 @@ export function useDrafts(userId: string) {
 }
 
 /**
- * What the editor shows and changes: the stored draft if there is one, else the recipe itself.
- * `base` is null for a recipe that has not been saved yet.
+ * The stored draft if there is one, else the recipe itself. `base` is null for a recipe that is not
+ * saved yet.
  */
 export function useWorkingCopy(userId: string, id: string, base: RecipeDetail | null) {
   const stored = useDrafts(userId).get(id) ?? null
@@ -173,7 +170,6 @@ export function useWorkingCopy(userId: string, id: string, base: RecipeDetail | 
 
   return {
     working,
-    /** True while the copy differs from what is saved. */
     isDraft: stored !== null,
     /** Changes the copy. Given a function, it gets the copy as it is at that moment. */
     update: (changes: Partial<Draft> | ((current: Draft) => Partial<Draft>)) => {
@@ -191,7 +187,6 @@ export function useWorkingCopy(userId: string, id: string, base: RecipeDetail | 
   }
 }
 
-/** For the code that starts or ends a draft without being the editor. */
 export const draftStore = {
   put: (userId: string, id: string, draft: Draft) => store(userId, id, draft),
   clear: (userId: string, id: string) => store(userId, id, null),

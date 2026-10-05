@@ -5,10 +5,6 @@ import { useState } from "react"
 
 import { FitImage } from "~/components/recipe/fit-image"
 
-/**
- * A strip with the recipe's first photo: a teaser, not the photo itself. It is shown whole, with
- * the photo blurred behind it to fill what is left over, and "View" opens it full screen.
- */
 export function Cover({
   src,
   alt,

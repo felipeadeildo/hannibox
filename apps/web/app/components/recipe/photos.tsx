@@ -15,7 +15,6 @@ import { Button } from "~/components/ui/button"
 import { Skeleton } from "~/components/ui/skeleton"
 import { Spinner } from "~/components/ui/spinner"
 
-/** A photo of the version being edited: one the recipe has, or one added here and not saved yet. */
 export type Photo = { id: string; src: string; pending: boolean }
 
 const tile = "relative aspect-square overflow-hidden rounded-2xl"
@@ -33,7 +32,6 @@ export function Photos({
   onRemove,
 }: {
   photos: Photo[]
-  /** How many are still being prepared. */
   adding: number
   onAdd: (files: File[]) => void
   onView: (index: number) => void
