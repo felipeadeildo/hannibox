@@ -12,6 +12,7 @@
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.7.7",
     "@hannibox/db": "workspace:*",
+    "@hannibox/shared": "workspace:*",
     "better-auth": "catalog:"
   },
   "devDependencies": {

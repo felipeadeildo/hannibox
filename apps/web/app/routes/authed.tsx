@@ -27,15 +27,15 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu"
 import { Kbd, KbdGroup } from "~/components/ui/kbd"
-import { authClient } from "~/lib/auth-client"
+import { readSession } from "~/lib/auth-client"
 import { type Theme, useTheme } from "~/lib/theme"
 
 import type { Route } from "./+types/authed"
 
 export async function clientLoader() {
-  const { data } = await authClient.getSession()
-  if (!data) throw redirect("/auth")
-  return { user: data.user }
+  const session = await readSession()
+  if (!session) throw redirect("/auth")
+  return { user: session.user }
 }
 
 // The session does not change while the tab is open, and the API answers 401 if it ends.
