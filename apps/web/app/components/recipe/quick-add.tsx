@@ -1,6 +1,6 @@
 import { HugeiconsIcon } from "~/components/app/icon"
 import { Add01Icon, AlertCircleIcon, HeadingIcon } from "@hugeicons/core-free-icons"
-import { useQuery } from "@tanstack/react-query"
+import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { IngredientLine, LIMITS, firstProblem } from "@hannibox/shared"
 import { cn } from "cn"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
@@ -79,6 +79,9 @@ const EXAMPLES = [
  * One field to add an ingredient. Type it the way you would say it and it opens up to show what it
  * understood, with a picture, before you add it. A line that ends in a colon starts a section.
  */
+// In a section's card the rows under the field start where the pictures of the lines do.
+const ROWS = "pr-3 pl-[2.875rem] pointer-coarse:pl-[3.375rem]"
+
 export function QuickAdd({
   bare = false,
   text,
@@ -130,8 +133,13 @@ export function QuickAdd({
     return () => clearInterval(timer)
   }, [text])
 
-  const query = useDebounced(name, 150)
-  const suggestions = useQuery({ ...ingredientOptions(query), enabled: query !== "" })
+  const query = useDebounced(name, 250)
+  // The last answer stays up while the next one loads, so the chips do not blink at every letter.
+  const suggestions = useQuery({
+    ...ingredientOptions(query),
+    enabled: query !== "",
+    placeholderData: keepPreviousData,
+  })
   // Nothing typed, nothing to suggest, even with an earlier answer still in the cache.
   const options =
     name === ""
@@ -139,7 +147,7 @@ export function QuickAdd({
       : (suggestions.data?.items ?? [])
           .filter((item) => item.name !== name && !target.names.has(item.name))
           .slice(0, 12)
-  const loadingOptions = name !== "" && suggestions.isFetching && options.length === 0
+  const loadingOptions = name !== "" && suggestions.isPending && options.length === 0
 
   function submit() {
     switch (reading.kind) {
@@ -198,7 +206,8 @@ export function QuickAdd({
       {reading.kind !== "empty" && (
         <div
           className={cn(
-            "flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-dashed px-3 py-2 text-sm",
+            "flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-dashed py-2 text-sm",
+            bare ? ROWS : "px-3",
             reading.kind === "problem" ? "text-destructive" : "text-muted-foreground",
           )}
           aria-live="polite"
@@ -224,7 +233,7 @@ export function QuickAdd({
 
       {(options.length > 0 || loadingOptions) && (
         <div
-          className="border-t border-dashed px-3 pt-2"
+          className={cn("border-t border-dashed pt-2", bare ? ROWS : "px-3")}
           role="group"
           aria-label="Ingredients you already use"
         >

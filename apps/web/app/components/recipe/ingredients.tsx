@@ -582,6 +582,8 @@ function Group({
       aria-label={sectioned ? section.title || "First section" : undefined}
       className={cn(
         "flex flex-col rounded-2xl border border-border/70 bg-background transition-colors focus-within:border-primary/50",
+        // Folded to its heading, the card keeps a little room so the heading does not sit on its corners.
+        folded && "pb-2",
         isDragging && "opacity-40",
       )}
     >
@@ -778,7 +780,7 @@ function AddRow({ title, onClick }: { title: string; onClick: () => void }) {
       className="group/add flex w-full items-center gap-2.5 rounded-b-2xl border-t border-dashed border-border/70 px-2 py-2.5 text-left text-base text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset active:bg-muted/40 md:text-sm"
     >
       <span aria-hidden className="-ml-1 size-8 shrink-0 pointer-coarse:size-10" />
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl transition-colors group-hover/add:text-primary">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl transition-colors group-hover/add:text-primary pointer-coarse:size-10">
         <HugeiconsIcon icon={Add01Icon} strokeWidth={2} className="size-4" />
       </span>
       {title ? `Add to ${title}` : "Add an ingredient"}
