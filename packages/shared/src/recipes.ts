@@ -54,8 +54,12 @@ export const ListRecipes = z.object({
   q: z.string().trim().max(100).optional(),
   /** Only recipes that are not a variation of another. */
   original: z.stringbool().optional(),
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(50).default(20),
+  /** Where the last page ended: the `nextCursor` it came with. Left out, the list starts at the top. */
+  cursor: z
+    .string()
+    .regex(/^\d{1,16}_[\w-]{1,64}$/, "That is not a cursor the API gave out")
+    .optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
 })
 
 export const FindIngredients = z.object({

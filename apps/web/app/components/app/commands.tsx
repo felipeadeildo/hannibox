@@ -14,6 +14,7 @@ import { useNavigate, useSubmit } from "react-router"
 
 import { Tile } from "~/components/app/tile"
 import { Kbd } from "~/components/ui/kbd"
+import { Skeleton } from "~/components/ui/skeleton"
 import {
   Command,
   CommandDialog,
@@ -31,12 +32,11 @@ import { useUser } from "~/hooks/use-user"
 import { recipeArt } from "~/lib/art"
 import { draftStore, emptyDraft, newDraftId, useDrafts } from "~/lib/drafts"
 import { shortDate } from "~/lib/format"
-import { listOptions } from "~/lib/recipes"
+import { searchOptions } from "~/lib/recipes"
 import { useTheme } from "~/lib/theme"
 
 type Commands = {
   openPalette: () => void
-  /** Starts a draft of a recipe that does not exist yet. */
   newRecipe: (title?: string) => void
 }
 
@@ -48,7 +48,6 @@ export function useCommands() {
   return commands
 }
 
-/** The shortcuts that work on every screen, and the palette they open. */
 export function CommandsProvider({ children }: { children: ReactNode }) {
   const user = useUser()
   const navigate = useNavigate()
@@ -83,7 +82,6 @@ export function CommandsProvider({ children }: { children: ReactNode }) {
   )
 }
 
-/** The part of `text` that matched what was typed, set apart. */
 function Highlight({ text, query }: { text: string; query: string }) {
   const at = query ? text.toLowerCase().indexOf(query.toLowerCase()) : -1
   if (at < 0) return <>{text}</>
@@ -116,11 +114,11 @@ function Palette({
 
   // The server does the matching, so a recipe is found by what it says and not only by its start.
   const found = useQuery({
-    ...listOptions({ q: useDebounced(q, 150), original: false, page: 1 }),
+    ...searchOptions(useDebounced(q, 150)),
     enabled: open,
   })
   const drafts = useDrafts(user.id)
-  const recipes = found.data?.items.slice(0, 6) ?? []
+  const recipes = found.data?.items ?? []
 
   const close = (next: boolean) => {
     onOpenChange(next)
@@ -153,6 +151,19 @@ function Palette({
           )}
         >
           {/* What was found comes first, so Enter opens it. Creating is the default only when nothing matches. */}
+          {found.isPending && (
+            <CommandGroup heading={q ? "Recipes" : "Recent"} aria-busy aria-label="Loading recipes">
+              {Array.from({ length: 3 }, (_, i) => (
+                <div key={i} className="flex items-center gap-3 px-2 py-2">
+                  <Skeleton className="size-9 rounded-lg" />
+                  <div className="flex flex-1 flex-col gap-1.5">
+                    <Skeleton className="h-4 w-1/2" />
+                    <Skeleton className="h-3 w-1/4" />
+                  </div>
+                </div>
+              ))}
+            </CommandGroup>
+          )}
           {recipes.length > 0 && (
             <CommandGroup heading={q ? "Recipes" : "Recent"}>
               {recipes.map((recipe) => {

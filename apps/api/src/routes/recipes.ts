@@ -8,7 +8,7 @@ import {
   type IngredientLine,
   type Unit,
 } from "@hannibox/shared"
-import { and, count, desc, eq, isNull, notInArray, sql } from "drizzle-orm"
+import { and, count, desc, eq, isNull, lt, notInArray, or, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import type { Context } from "hono"
 
@@ -21,6 +21,13 @@ import { validate } from "../validate"
 const { image, ingredient, recipe, recipeIngredient } = schema
 
 type Line = Pick<IngredientLine, "name" | "quantity" | "unit">
+
+const writeCursor = (row: { updatedAt: Date; id: string }) => `${row.updatedAt.getTime()}_${row.id}`
+
+function readCursor(cursor: string) {
+  const at = cursor.indexOf("_")
+  return { updatedAt: new Date(Number(cursor.slice(0, at))), id: cursor.slice(at + 1) }
+}
 
 const notFound = (c: Context<UserEnv>) =>
   c.json({ error: "Recipe not found" } satisfies ApiError, 404)
@@ -38,7 +45,7 @@ async function owns(db: Db, userId: string, id: string) {
   return row !== undefined
 }
 
-/** A recipe with its ingredient lines in order and the ids of its images, never their bytes. */
+/** Image ids only, never their bytes. */
 async function loadRecipe(db: Db, userId: string, id: string) {
   const row = await db.query.recipe.findFirst({
     columns: { userId: false },
@@ -65,8 +72,8 @@ async function loadRecipe(db: Db, userId: string, id: string) {
 }
 
 /**
- * The new photos of a save, as inserts owned by the recipe the save wrote. Only reading the bytes
- * waits: a query builder is thenable, so returning one from an async function would run it.
+ * A query builder is thenable, so returning one from an async function would run it. Only reading
+ * the bytes is awaited.
  */
 async function writePhotos(db: Db, recipeId: string, photos: File[]) {
   const bytes = await Promise.all(photos.map((file) => file.arrayBuffer()))
@@ -123,14 +130,15 @@ function writeIngredients(db: Db, recipeId: string, lines: Line[]) {
 export default new Hono<UserEnv>()
   .use(requireUser)
   .get("/", validate("query", ListRecipes), async (c) => {
-    const { q, original, page, pageSize } = c.req.valid("query")
+    const { q, original, cursor, limit } = c.req.valid("query")
     const db = c.get("db")
-    const where = and(
+    const mine = and(
       eq(recipe.userId, c.get("user").id),
       original ? isNull(recipe.parentId) : undefined,
       q ? contains(recipe.title, q) : undefined,
     )
-    const [items, [counted]] = await db.batch([
+    const after = cursor ? readCursor(cursor) : undefined
+    const [rows, [counted]] = await db.batch([
       db
         .select({
           id: recipe.id,
@@ -154,14 +162,25 @@ export default new Hono<UserEnv>()
           >`(select image.id from image where image.recipe_id = recipe.id limit 1)`,
         })
         .from(recipe)
-        .where(where)
+        .where(
+          and(
+            mine,
+            after &&
+              or(
+                lt(recipe.updatedAt, after.updatedAt),
+                and(eq(recipe.updatedAt, after.updatedAt), lt(recipe.id, after.id)),
+              ),
+          ),
+        )
         .orderBy(desc(recipe.updatedAt), desc(recipe.id))
-        .limit(pageSize)
-        .offset((page - 1) * pageSize),
-      db.select({ total: count() }).from(recipe).where(where),
+        // One more than asked for, to know whether there is a next page without a second query.
+        .limit(limit + 1),
+      db.select({ total: count() }).from(recipe).where(mine),
     ])
-    const total = must(counted).total
-    return c.json({ items, page, pageSize, total, pages: Math.ceil(total / pageSize) }, 200)
+    const items = rows.slice(0, limit)
+    const last = items.at(-1)
+    const nextCursor = rows.length > limit && last ? writeCursor(last) : null
+    return c.json({ items, nextCursor, total: must(counted).total }, 200)
   })
   .post("/", validate("form", SaveForm), async (c) => {
     const save = readSave(CreateRecipe, c.req.valid("form"))
@@ -196,7 +215,7 @@ export default new Hono<UserEnv>()
         .update(recipe)
         .set({ ...fields, updatedAt: new Date() })
         .where(eq(recipe.id, id)),
-      // The photos named stay, and this recipe's others are deleted. None named deletes them all.
+      // The photos named stay and the rest go. Naming none deletes them all.
       ...(images
         ? [
             db
@@ -239,8 +258,6 @@ export default new Hono<UserEnv>()
     ])
     return c.body(null, 204)
   })
-  // Every recipe of the tree this one belongs to, as a flat list: the client links
-  // `parentId` to `id` and draws it however it likes. `rootId` is the original.
   .get("/:id/tree", async (c) => {
     const id = c.req.param("id")
     const userId = c.get("user").id
@@ -274,9 +291,6 @@ export default new Hono<UserEnv>()
     const root = nodes.find((node) => node.parentId === null)
     return root ? c.json({ rootId: root.id, currentId: id, nodes }, 200) : notFound(c)
   })
-  // A copy of the recipe, its ingredients and its photos, linked below it in the tree.
-  // The form can change any field of the copy, name the photos to bring along and add new ones,
-  // so saving an edited draft is one request.
   .post("/:id/variations", validate("form", SaveForm), async (c) => {
     const save = readSave(CreateVariation, c.req.valid("form"))
     if (!save.ok) return refused(c, save)
@@ -287,8 +301,7 @@ export default new Hono<UserEnv>()
     if (!from) return notFound(c)
 
     const id = crypto.randomUUID()
-    // The copy gets its own photos, so deleting the original later cannot take them away.
-    // Only the ones named are copied; the original keeps all of its own either way.
+    // The copy gets its own photos, so deleting the original cannot take them away.
     const copies = from.images
       .filter((photo) => images === undefined || images.includes(photo.id))
       .map((photo) => ({ from: photo.id, to: crypto.randomUUID() }))

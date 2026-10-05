@@ -2,8 +2,6 @@ import { HugeiconsIcon } from "~/components/app/icon"
 import {
   AlertCircleIcon,
   Add01Icon,
-  ArrowLeft01Icon,
-  ArrowRight01Icon,
   Bread01Icon,
   CakeIcon,
   Cancel01Icon,
@@ -21,10 +19,18 @@ import {
   Undo02Icon,
   WheatIcon,
 } from "@hugeicons/core-free-icons"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query"
 import { cn } from "cn"
-import { useEffect, useState } from "react"
-import { Link, NavLink, useLocation, useSearchParams } from "react-router"
+import {
+  type ComponentProps,
+  type ReactNode,
+  type Ref,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
+import { NavLink, useLocation, useSearchParams } from "react-router"
 import { toast } from "sonner"
 
 import { useCommands } from "~/components/app/commands"
@@ -32,7 +38,7 @@ import { DeleteRecipeDialog, type DoomedRecipe } from "~/components/app/delete-r
 import { DraftPill } from "~/components/app/draft-pill"
 import { EmptyArt } from "~/components/app/empty-art"
 import { Tile } from "~/components/app/tile"
-import { Button, buttonVariants } from "~/components/ui/button"
+import { Button } from "~/components/ui/button"
 import {
   ContextMenu,
   ContextMenuContent,
@@ -59,11 +65,12 @@ import {
   InputGroupInput,
 } from "~/components/ui/input-group"
 import { Kbd } from "~/components/ui/kbd"
-import { Pagination, PaginationContent, PaginationItem } from "~/components/ui/pagination"
+import { ScrollArea } from "~/components/ui/scroll-area"
 import { Skeleton } from "~/components/ui/skeleton"
 import { ToggleGroup, ToggleGroupItem } from "~/components/ui/toggle-group"
 import { useDebounced } from "~/hooks/use-debounced"
 import { useHotkey } from "~/hooks/use-hotkey"
+import { useSentinel } from "~/hooks/use-sentinel"
 import { useUser } from "~/hooks/use-user"
 import { recipeArt } from "~/lib/art"
 import { type Draft, draftStore, isLocalId, useDrafts } from "~/lib/drafts"
@@ -77,7 +84,6 @@ export function RecipeList({ activeId }: { activeId?: string }) {
   const [params, setParams] = useSearchParams()
   const q = params.get("q") ?? ""
   const original = params.get("show") === "originals"
-  const page = Math.max(1, Number(params.get("page")) || 1)
 
   const [text, setText] = useState(q)
   const typed = useDebounced(text.trim(), 250)
@@ -88,18 +94,42 @@ export function RecipeList({ activeId }: { activeId?: string }) {
         const next = new URLSearchParams(existing)
         if (typed) next.set("q", typed)
         else next.delete("q")
-        next.delete("page")
         return next
       },
       { replace: true },
     )
   }, [typed, q, setParams])
 
-  const list = useQuery(listOptions({ q, original, page }))
+  const list = useInfiniteQuery(listOptions({ q, original }))
+  // Pages are fetched one after another, so a recipe saved in between can land in two of them. One row each.
+  const items = useMemo(() => {
+    const byId = new Map<string, RecipeSummary>()
+    for (const page of list.data?.pages ?? []) {
+      for (const item of page.items) byId.set(item.id, item)
+    }
+    return [...byId.values()]
+  }, [list.data])
+  const total = list.data?.pages[0]?.total ?? 0
+  // A failed next page leaves `isError` on while the recipes already loaded are still there.
+  const failed = list.isError && list.data === undefined
+
+  const [viewport, setViewport] = useState<HTMLDivElement | null>(null)
+  useEffect(() => {
+    viewport?.scrollTo({ top: 0 })
+  }, [viewport, q, original])
+  const canLoadMore =
+    list.hasNextPage &&
+    !list.isFetchingNextPage &&
+    !list.isFetchNextPageError &&
+    !list.isPlaceholderData
+  const sentinel = useSentinel<HTMLDivElement>(
+    viewport,
+    canLoadMore,
+    () => void list.fetchNextPage(),
+  )
   const drafts = useDrafts(user.id)
   const [doomed, setDoomed] = useState<DoomedRecipe | null>(null)
 
-  /** The query string with these changes, for a link. A null removes the key. */
   const search = (changes: Record<string, string | null>) => {
     const next = new URLSearchParams(params)
     for (const [key, value] of Object.entries(changes)) {
@@ -118,7 +148,85 @@ export function RecipeList({ activeId }: { activeId?: string }) {
   const unsaved = [...drafts]
     .filter(([id]) => isLocalId(id))
     .sort((a, b) => b[1].touchedAt - a[1].touchedAt)
-  const { items = [], pages = 1, total = 0 } = list.data ?? {}
+
+  function body() {
+    if (list.isPending) {
+      return (
+        <div aria-busy aria-label="Loading recipes">
+          {Array.from({ length: 7 }, (_, i) => (
+            <RowSkeleton key={i} />
+          ))}
+        </div>
+      )
+    }
+    if (failed) {
+      return (
+        <EmptyState
+          icons={[WheatIcon, AlertCircleIcon, EggsIcon]}
+          title="Could not load your recipes"
+          description={list.error.message}
+          action={
+            <Button variant="outline" onClick={() => void list.refetch()}>
+              Try again
+            </Button>
+          }
+        />
+      )
+    }
+    if (items.length === 0 && unsaved.length === 0) {
+      return q ? (
+        <EmptyState
+          icons={[SoupIcon, FileSearchIcon, CakeIcon]}
+          title={`Nothing matches “${q}”`}
+          description="Try another word, or write it down as a new recipe."
+          action={
+            <Button onClick={() => newRecipe(q)}>
+              <HugeiconsIcon icon={Add01Icon} strokeWidth={2} data-icon="inline-start" />
+              Start “{q}”
+            </Button>
+          }
+        />
+      ) : (
+        <EmptyState
+          icons={[EggFriedIcon, ChefHatIcon, Bread01Icon]}
+          title="Your recipe box is empty"
+          description="Write down the first one. Every change you make after that is kept as a version, so nothing is lost."
+          action={
+            <Button onClick={() => newRecipe()}>
+              <HugeiconsIcon icon={Add01Icon} strokeWidth={2} data-icon="inline-start" />
+              Write the first recipe
+            </Button>
+          }
+        />
+      )
+    }
+    return (
+      <div
+        aria-busy={list.isPlaceholderData}
+        className={cn("transition-opacity", list.isPlaceholderData && "opacity-60")}
+      >
+        <ul className="flex flex-col gap-0.5">
+          {items.map((recipe) => (
+            <RecipeItem
+              key={recipe.id}
+              recipe={recipe}
+              search={current}
+              draft={drafts.get(recipe.id)}
+              onDelete={setDoomed}
+            />
+          ))}
+        </ul>
+        <ListEnd
+          sentinel={sentinel}
+          failed={list.isFetchNextPageError}
+          fetching={list.isFetchingNextPage}
+          hasMore={list.hasNextPage}
+          pagesLoaded={list.data?.pages.length ?? 0}
+          onLoadMore={() => void list.fetchNextPage()}
+        />
+      </div>
+    )
+  }
 
   return (
     <>
@@ -163,7 +271,7 @@ export function RecipeList({ activeId }: { activeId?: string }) {
           <ToggleGroup
             value={[original ? "originals" : "all"]}
             onValueChange={(value) =>
-              setParams(search({ show: value[0] === "originals" ? "originals" : null, page: null }))
+              setParams(search({ show: value[0] === "originals" ? "originals" : null }))
             }
             variant="outline"
             size="sm"
@@ -181,7 +289,12 @@ export function RecipeList({ activeId }: { activeId?: string }) {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-24 md:pb-2">
+      <ScrollArea
+        fade="y"
+        viewportRef={setViewport}
+        className="min-h-0 flex-1"
+        viewportClassName="px-2 pb-24 md:pb-2"
+      >
         {unsaved.length > 0 && (
           <ul className="mb-2 flex flex-col gap-0.5">
             {unsaved.map(([id, draft]) => (
@@ -190,96 +303,8 @@ export function RecipeList({ activeId }: { activeId?: string }) {
           </ul>
         )}
 
-        {list.isPending ? (
-          <div className="flex flex-col" aria-busy aria-label="Loading recipes">
-            {Array.from({ length: 7 }, (_, i) => (
-              <div key={i} className="flex items-center gap-3 px-3 py-2.5">
-                <Skeleton className="size-11 rounded-xl" />
-                <div className="flex flex-1 flex-col gap-2">
-                  <Skeleton className="h-4 w-2/3" />
-                  <Skeleton className="h-3 w-1/3" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : list.isError ? (
-          <Empty className="border-0">
-            <EmptyHeader>
-              <EmptyArt icons={[WheatIcon, AlertCircleIcon, EggsIcon]} />
-              <EmptyTitle>Could not load your recipes</EmptyTitle>
-              <EmptyDescription>
-                {list.error.message}. Check your connection and try again.
-              </EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              <Button variant="outline" onClick={() => void list.refetch()}>
-                Try again
-              </Button>
-            </EmptyContent>
-          </Empty>
-        ) : items.length === 0 && unsaved.length === 0 ? (
-          q ? (
-            <Empty className="border-0">
-              <EmptyHeader>
-                <EmptyArt icons={[SoupIcon, FileSearchIcon, CakeIcon]} />
-                <EmptyTitle>Nothing matches “{q}”</EmptyTitle>
-                <EmptyDescription>
-                  Try another word, or write it down as a new recipe.
-                </EmptyDescription>
-              </EmptyHeader>
-              <EmptyContent>
-                <Button onClick={() => newRecipe(q)}>
-                  <HugeiconsIcon icon={Add01Icon} strokeWidth={2} data-icon="inline-start" />
-                  Start “{q}”
-                </Button>
-              </EmptyContent>
-            </Empty>
-          ) : (
-            <Empty className="border-0">
-              <EmptyHeader>
-                <EmptyArt icons={[EggFriedIcon, ChefHatIcon, Bread01Icon]} />
-                <EmptyTitle>Your recipe box is empty</EmptyTitle>
-                <EmptyDescription>
-                  Write down the first one. Every change you make after that is kept as a version,
-                  so nothing is lost.
-                </EmptyDescription>
-              </EmptyHeader>
-              <EmptyContent>
-                <Button onClick={() => newRecipe()}>
-                  <HugeiconsIcon icon={Add01Icon} strokeWidth={2} data-icon="inline-start" />
-                  Write the first recipe
-                </Button>
-              </EmptyContent>
-            </Empty>
-          )
-        ) : (
-          // The page that was there stays, dimmed, until the next one arrives.
-          <ul
-            className={cn(
-              "flex flex-col gap-0.5 transition-opacity",
-              list.isPlaceholderData && "opacity-60",
-            )}
-          >
-            {items.map((recipe) => (
-              <RecipeItem
-                key={recipe.id}
-                recipe={recipe}
-                search={current}
-                draft={drafts.get(recipe.id)}
-                onDelete={setDoomed}
-              />
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {pages > 1 && (
-        <Pager
-          page={page}
-          pages={pages}
-          to={(next) => search({ page: next > 1 ? String(next) : null })}
-        />
-      )}
+        {body()}
+      </ScrollArea>
 
       {/* A phone has its thumb at the bottom, so the way to start a recipe is down there. */}
       <Button
@@ -359,7 +384,6 @@ function RecipeItem({
   const client = useQueryClient()
   const user = useUser()
   const art = recipeArt(recipe.title)
-  // Warm the cache before the click, so the recipe is there when the page is.
   const warm = () => void client.prefetchQuery(recipeOptions(recipe.id))
 
   const actions = [
@@ -479,73 +503,98 @@ function RecipeItem({
   )
 }
 
-/** 1 … 4 5 6 … 9: the first, the last, and the pages around this one. */
-function windowOf(page: number, pages: number) {
-  const shown = new Set([1, pages, page - 1, page, page + 1].filter((n) => n >= 1 && n <= pages))
-  const out: (number | "gap")[] = []
-  let last = 0
-  for (const n of [...shown].sort((a, b) => a - b)) {
-    if (n - last > 1) out.push("gap")
-    out.push(n)
-    last = n
-  }
-  return out
+function EmptyState({
+  icons,
+  title,
+  description,
+  action,
+}: {
+  icons: ComponentProps<typeof EmptyArt>["icons"]
+  title: string
+  description: string
+  action: ReactNode
+}) {
+  return (
+    <Empty className="border-0">
+      <EmptyHeader>
+        <EmptyArt icons={icons} />
+        <EmptyTitle>{title}</EmptyTitle>
+        <EmptyDescription>{description}</EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>{action}</EmptyContent>
+    </Empty>
+  )
 }
 
-function Pager({ page, pages, to }: { page: number; pages: number; to: (page: number) => string }) {
-  const link = (target: number, label: string, children: React.ReactNode, active = false) => (
-    <Link
-      to={to(target)}
-      aria-label={label}
-      aria-current={active ? "page" : undefined}
-      className={buttonVariants({ variant: active ? "outline" : "ghost", size: "icon" })}
-    >
-      {children}
-    </Link>
+function RowSkeleton() {
+  return (
+    <div className="flex items-center gap-3 px-3 py-2.5">
+      <Skeleton className="size-11 rounded-xl" />
+      <div className="flex flex-1 flex-col gap-2">
+        <Skeleton className="h-4 w-2/3" />
+        <Skeleton className="h-3 w-1/3" />
+      </div>
+    </div>
   )
-  const edge = (label: string, icon: typeof ArrowLeft01Icon) => (
-    <Button variant="ghost" size="icon" disabled aria-label={label}>
-      <HugeiconsIcon icon={icon} strokeWidth={2} />
-    </Button>
-  )
+}
+
+function LoadMoreFailed({ onRetry }: { onRetry: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  // It appears below where the list was scrolled to, so it would be out of sight.
+  useEffect(() => {
+    ref.current?.scrollIntoView({ block: "nearest" })
+  }, [])
 
   return (
-    <Pagination className="border-t bg-background p-2">
-      <PaginationContent>
-        <PaginationItem>
-          {page > 1
-            ? link(
-                page - 1,
-                "Previous page",
-                <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={2} />,
-              )
-            : edge("Previous page", ArrowLeft01Icon)}
-        </PaginationItem>
-        {windowOf(page, pages).map((entry, index) => (
-          <PaginationItem key={entry === "gap" ? `gap-${index}` : entry}>
-            {entry === "gap" ? (
-              <span
-                aria-hidden
-                className="flex size-8 items-center justify-center text-muted-foreground"
-              >
-                …
-              </span>
-            ) : (
-              link(
-                entry,
-                `Page ${entry}`,
-                <span className="tabular-nums">{entry}</span>,
-                entry === page,
-              )
-            )}
-          </PaginationItem>
-        ))}
-        <PaginationItem>
-          {page < pages
-            ? link(page + 1, "Next page", <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} />)
-            : edge("Next page", ArrowRight01Icon)}
-        </PaginationItem>
-      </PaginationContent>
-    </Pagination>
+    <div ref={ref} role="alert" className="flex flex-col items-center gap-2 px-4 py-5 text-center">
+      <p className="text-sm text-muted-foreground">Couldn’t load more recipes.</p>
+      <Button variant="outline" size="sm" onClick={onRetry}>
+        Try again
+      </Button>
+    </div>
   )
+}
+
+/**
+ * What sits under the last recipe loaded. While there is more, it is also the thing that loads it:
+ * scrolling it into view does, and so does pressing the button, for anyone who is not scrolling.
+ */
+function ListEnd({
+  sentinel,
+  failed,
+  fetching,
+  hasMore,
+  pagesLoaded,
+  onLoadMore,
+}: {
+  sentinel: Ref<HTMLDivElement>
+  failed: boolean
+  fetching: boolean
+  hasMore: boolean
+  pagesLoaded: number
+  onLoadMore: () => void
+}) {
+  if (failed) return <LoadMoreFailed onRetry={onLoadMore} />
+  if (fetching) {
+    return (
+      <div aria-busy aria-label="Loading more recipes">
+        {Array.from({ length: 3 }, (_, i) => (
+          <RowSkeleton key={i} />
+        ))}
+      </div>
+    )
+  }
+  if (hasMore) {
+    return (
+      <div ref={sentinel} className="flex justify-center py-3">
+        <Button variant="ghost" size="sm" onClick={onLoadMore}>
+          Show more
+        </Button>
+      </div>
+    )
+  }
+  // A short list ends where it ends. Only one that took a few pages to read needs saying so.
+  return pagesLoaded > 1 ? (
+    <p className="py-4 text-center text-xs text-muted-foreground">That’s every recipe.</p>
+  ) : null
 }

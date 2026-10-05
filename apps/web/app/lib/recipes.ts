@@ -1,5 +1,10 @@
 import type { CreateVariation } from "@hannibox/shared"
-import { keepPreviousData, queryOptions, useMutation } from "@tanstack/react-query"
+import {
+  infiniteQueryOptions,
+  keepPreviousData,
+  queryOptions,
+  useMutation,
+} from "@tanstack/react-query"
 import type { InferResponseType } from "hono/client"
 import type { z } from "zod"
 
@@ -12,7 +17,6 @@ export type RecipeList = InferResponseType<typeof api.recipes.$get, 200>
 export type RecipeSummary = RecipeList["items"][number]
 export type TreeData = InferResponseType<(typeof api.recipes)[":id"]["tree"]["$get"], 200>
 
-/** Every field of a recipe, each one optional. */
 export type RecipeFields = z.input<typeof CreateVariation>
 
 export const recipeKeys = {
@@ -23,22 +27,43 @@ export const recipeKeys = {
   tree: (id: string) => ["recipes", "tree", id] as const,
 }
 
-export type ListFilters = { q: string; original: boolean; page: number }
+export type ListFilters = { q: string; original: boolean }
+
+const PAGE = 20
+
+async function fetchRecipes({
+  q,
+  original,
+  cursor,
+  limit,
+}: ListFilters & { cursor?: string; limit: number }) {
+  return unwrap(
+    await api.recipes.$get({
+      query: {
+        q: q || undefined,
+        original: original ? "true" : undefined,
+        cursor,
+        limit: String(limit),
+      },
+    }),
+  )
+}
 
 export const listOptions = (filters: ListFilters) =>
+  infiniteQueryOptions({
+    queryKey: [...recipeKeys.lists, "all", filters],
+    queryFn: ({ pageParam }) => fetchRecipes({ ...filters, cursor: pageParam, limit: PAGE }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    // What was on screen stays, dimmed, while a different search or filter loads.
+    placeholderData: keepPreviousData,
+  })
+
+/** A few matches for the command palette, which has no use for more than the top of the list. */
+export const searchOptions = (q: string) =>
   queryOptions({
-    queryKey: [...recipeKeys.lists, filters],
-    queryFn: async () =>
-      unwrap(
-        await api.recipes.$get({
-          query: {
-            q: filters.q || undefined,
-            original: filters.original ? "true" : undefined,
-            page: String(filters.page),
-          },
-        }),
-      ),
-    // The previous page stays on screen while the next one loads.
+    queryKey: [...recipeKeys.lists, "search", q],
+    queryFn: () => fetchRecipes({ q, original: false, limit: 6 }),
     placeholderData: keepPreviousData,
   })
 
@@ -62,7 +87,6 @@ export const ingredientOptions = (q: string) =>
     placeholderData: keepPreviousData,
   })
 
-/** What saving a draft does: a new recipe, a new version under one, or a rewrite of one. */
 export type SaveMode =
   | { kind: "create" }
   | { kind: "version"; id: string }
