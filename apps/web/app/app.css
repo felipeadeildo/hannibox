@@ -472,11 +472,62 @@
   }
 }
 
-/* A toast has to stand off the page, not melt into it: more shadow, and a rim of the text colour. */
-[data-sonner-toast][data-styled="true"] {
+/* A toast at the bottom of a phone clears the button or bar the thumb is using down there: the
+   new recipe button, or the save bar while it shows. */
+:root {
+  --toast-floor: calc(env(safe-area-inset-bottom) + 1rem);
+}
+:root:has([data-toast-floor]:not([inert])) {
+  --toast-floor: calc(env(safe-area-inset-bottom) + 5.5rem);
+}
+
+/* A toast wears the save bar's material, in the app's own type, and stands off the page with more
+   shadow. Sonner adds its stylesheet after this one, so each rule names the toaster to win. */
+[data-sonner-toaster][data-sonner-theme] {
+  font-family: var(--font-sans);
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] {
+  gap: 0.625rem;
+  padding: 0.75rem 0.75rem 0.75rem 1rem;
+  font-size: 0.875rem;
+  background: color-mix(in oklch, var(--popover) 95%, transparent);
+  backdrop-filter: blur(12px);
   box-shadow:
     0 14px 34px -12px oklch(0 0 0 / 0.38),
     0 2px 6px oklch(0 0 0 / 0.1);
+
+  & [data-description] {
+    color: var(--muted-foreground);
+  }
+
+  /* The action is the reason the toast is there, so it is a real button, as big as the others. */
+  & [data-button] {
+    height: 2rem;
+    padding-inline: 0.75rem;
+    border-radius: var(--radius-lg);
+    font-size: 0.875rem;
+    background: var(--primary);
+    color: var(--primary-foreground);
+    transition:
+      background-color 150ms,
+      box-shadow 150ms;
+
+    &:active {
+      translate: 0 1px;
+    }
+    &:focus-visible {
+      box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent);
+    }
+    @media (hover: hover) {
+      &:hover {
+        background: color-mix(in oklch, var(--primary) 80%, transparent);
+      }
+    }
+    @media (pointer: coarse) {
+      height: 2.5rem;
+      padding-inline: 1rem;
+    }
+  }
 }
 
 /* Edge fades for a scroll area. The viewport says how far each edge is from the content that is

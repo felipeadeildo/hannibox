@@ -84,7 +84,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Outlet />
-        <Toaster position="top-center" theme={resolved} />
+        <Toaster theme={resolved} />
       </TooltipProvider>
     </QueryClientProvider>
   )

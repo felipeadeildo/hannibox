@@ -8,10 +8,23 @@ import {
   Loading03Icon,
 } from "@hugeicons/core-free-icons"
 
+import { useMedia } from "~/hooks/use-media"
+
+// How far a bottom toast stands off the edge. `app.css` raises it over whatever the thumb is using.
+const floor = { bottom: "var(--toast-floor)" }
+
 const Toaster = ({ ...props }: ToasterProps) => {
+  const wide = useMedia("(min-width: 768px)")
+
   return (
     <Sonner
       className="toaster group"
+      // On a phone the toast comes up where the thumb already is, so Undo is in reach, and a flick
+      // down or to either side puts it away.
+      position={wide ? "top-center" : "bottom-center"}
+      swipeDirections={wide ? undefined : ["bottom", "left", "right"]}
+      offset={floor}
+      mobileOffset={floor}
       icons={{
         success: <HugeiconsIcon icon={CheckmarkCircle02Icon} strokeWidth={2} className="size-4" />,
         info: <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={2} className="size-4" />,
@@ -28,7 +41,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--normal-bg": "var(--popover)",
           "--normal-text": "var(--popover-foreground)",
           "--normal-border": "color-mix(in oklch, var(--foreground) 18%, transparent)",
-          "--border-radius": "var(--radius)",
+          "--border-radius": "var(--radius-2xl)",
         } as React.CSSProperties
       }
       toastOptions={{
