@@ -39,6 +39,8 @@ import { AmountField, UnitPicker } from "~/components/recipe/amount-fields"
 import { Button } from "~/components/ui/button"
 import { Input } from "~/components/ui/input"
 import { Kbd } from "~/components/ui/kbd"
+import { ScrollArea } from "~/components/ui/scroll-area"
+import { Skeleton } from "~/components/ui/skeleton"
 import { Spinner } from "~/components/ui/spinner"
 import { useDebounced } from "~/hooks/use-debounced"
 import { ingredientArt } from "~/lib/art"
@@ -120,30 +122,34 @@ export function Ingredients({
           </p>
         </div>
       ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-          <SortableContext
-            items={lines.map((line) => line.name)}
-            strategy={verticalListSortingStrategy}
-          >
-            <ul className="flex flex-col">
-              {lines.map((line) => (
-                <Line
-                  key={line.name}
-                  line={line}
-                  saved={saved.get(line.name)}
-                  scale={scale}
-                  taken={names}
-                  onChange={(next) =>
-                    onEdit((current) =>
-                      current.map((other) => (other.name === line.name ? next : other)),
-                    )
-                  }
-                  onRemove={() => remove(line)}
-                />
-              ))}
-            </ul>
-          </SortableContext>
-        </DndContext>
+        // Capped on a desk, where a wheel scrolls it. On a phone the page scrolls, and a list that
+        // scrolls inside it would catch a thumb that is only trying to get past.
+        <ScrollArea fade="y" className="md:max-h-[32rem]">
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+            <SortableContext
+              items={lines.map((line) => line.name)}
+              strategy={verticalListSortingStrategy}
+            >
+              <ul className="flex flex-col">
+                {lines.map((line) => (
+                  <Line
+                    key={line.name}
+                    line={line}
+                    saved={saved.get(line.name)}
+                    scale={scale}
+                    taken={names}
+                    onChange={(next) =>
+                      onEdit((current) =>
+                        current.map((other) => (other.name === line.name ? next : other)),
+                      )
+                    }
+                    onRemove={() => remove(line)}
+                  />
+                ))}
+              </ul>
+            </SortableContext>
+          </DndContext>
+        </ScrollArea>
       )}
       <QuickAdd
         taken={names}
@@ -418,7 +424,8 @@ function QuickAdd({
   })
   const options = (suggestions.data?.items ?? [])
     .filter((item) => item.name !== name && !taken.has(item.name))
-    .slice(0, 5)
+    .slice(0, 12)
+  const loadingOptions = name !== "" && suggestions.isFetching && options.length === 0
 
   function submit() {
     if (!parsed || clash) return
@@ -500,28 +507,37 @@ function QuickAdd({
         </p>
       )}
 
-      {options.length > 0 && (
+      {(options.length > 0 || loadingOptions) && (
         <div
-          className="flex gap-1.5 overflow-x-auto border-t border-dashed px-3 py-2"
+          className="border-t border-dashed px-3 pt-2"
+          role="group"
           aria-label="Ingredients you already use"
         >
-          {options.map((item) => (
-            <Button
-              key={item.id}
-              type="button"
-              variant="outline"
-              size="sm"
-              className="shrink-0"
-              onClick={() => {
-                // Keep the amount and the unit, and swap in the name that was suggested.
-                const at = text.toLowerCase().lastIndexOf(name)
-                setText(`${text.slice(0, at)}${item.name}`)
-                input.current?.focus()
-              }}
-            >
-              {item.name}
-            </Button>
-          ))}
+          <ScrollArea orientation="horizontal" fade="x">
+            <div className="flex gap-1.5 pb-2.5" aria-busy={loadingOptions}>
+              {loadingOptions
+                ? Array.from({ length: 4 }, (_, i) => (
+                    <Skeleton key={i} className="h-7 w-20 shrink-0 rounded-lg pointer-coarse:h-9" />
+                  ))
+                : options.map((item) => (
+                    <Button
+                      key={item.id}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => {
+                        // Keep the amount and the unit, and swap in the name that was suggested.
+                        const at = text.toLowerCase().lastIndexOf(name)
+                        setText(`${text.slice(0, at)}${item.name}`)
+                        input.current?.focus()
+                      }}
+                    >
+                      {item.name}
+                    </Button>
+                  ))}
+            </div>
+          </ScrollArea>
         </div>
       )}
     </form>

@@ -210,3 +210,26 @@
     0 14px 34px -12px oklch(0 0 0 / 0.38),
     0 2px 6px oklch(0 0 0 / 0.1);
 }
+
+/* Edge fades for a scroll area. The viewport says how far each edge is from the content that is
+   past it, so an edge fades only when there is more to scroll to, and by no more than that. */
+@layer components {
+  .scroll-fade-y {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      #000 min(1.75rem, var(--scroll-area-overflow-y-start, 0px)),
+      #000 calc(100% - min(1.75rem, var(--scroll-area-overflow-y-end, 0px))),
+      transparent
+    );
+  }
+  .scroll-fade-x {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 min(1.5rem, var(--scroll-area-overflow-x-start, 0px)),
+      #000 calc(100% - min(1.5rem, var(--scroll-area-overflow-x-end, 0px))),
+      transparent
+    );
+  }
+}
