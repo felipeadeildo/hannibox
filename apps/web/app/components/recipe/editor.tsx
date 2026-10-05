@@ -24,12 +24,12 @@ import { AdaptivePanel } from "~/components/app/adaptive-panel"
 import { DeleteRecipeDialog, type DoomedRecipe } from "~/components/app/delete-recipe-dialog"
 import { DraftPill } from "~/components/app/draft-pill"
 import { AmountField, UnitPicker } from "~/components/recipe/amount-fields"
-import { ContentEditor } from "~/components/recipe/content-editor"
 import { Cover } from "~/components/recipe/cover"
 import { Ingredients, type EditLines } from "~/components/recipe/ingredients"
 import { PhotoViewer } from "~/components/recipe/photo-viewer"
 import { type Photo, Photos } from "~/components/recipe/photos"
 import { type SaveKind, SaveBar } from "~/components/recipe/save-bar"
+import { Steps } from "~/components/recipe/steps"
 import { TreeSheet } from "~/components/recipe/tree-sheet"
 import { Badge } from "~/components/ui/badge"
 import {
@@ -317,8 +317,15 @@ export function RecipeEditor({ id, base }: { id: string; base?: RecipeDetail }) 
       </section>
 
       <section className="flex flex-col gap-4" aria-labelledby="steps">
-        <SectionTitle id="steps" icon={LeftToRightListNumberIcon} title="Steps" />
-        <ContentEditor value={working.content} onChange={(content) => update({ content })} />
+        <Steps
+          value={working.content}
+          onChange={(content) => update({ content })}
+          title={(action) => (
+            <SectionTitle id="steps" icon={LeftToRightListNumberIcon} title="Steps">
+              {action}
+            </SectionTitle>
+          )}
+        />
       </section>
 
       <section className="flex flex-col gap-4" aria-labelledby="photos">
