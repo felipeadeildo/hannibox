@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="apps/web/public/favicon.svg" width="64" height="64" alt="" />
+
 # hannibox
 
 A recipe box where every change is a version.
@@ -8,23 +10,48 @@ A recipe box where every change is a version.
 
 <br />
 
-[How it works](#how-it-works) · [Stack](#stack) · [Run it](#run-it) · [Contributing](CONTRIBUTING.md)
+<img src="apps/web/public/og.png" width="820" alt="A version tree: a banana bread, the versions made from it, and a draft that is not saved yet." />
 
 </div>
 
 <br />
 
-## Why
+## The idea
 
-A recipe drifts. You add more salt, swap the flour, and a year later you can't tell what the first version was. hannibox keeps every variation in a tree. The original is the root, each save adds a child, and you can open any node to cook it or branch from it.
+You bake your grandmother's banana bread. The next time you add walnuts. A week later you cut the sugar, and then you try browning the butter. Every change was an improvement, and now you can't say what the original tasted like or which change made it better.
 
-## How it works
+hannibox keeps all of it. A recipe is a tree. The original is the root, and each change you save becomes a new version under the one you started from. Nothing is overwritten unless you ask for it.
 
-- **Edits are drafts.** What you change stays on your device, photos included, until you save. Nothing reaches the server while you type.
-- **Saving makes a version.** The new recipe sits under the one you opened and keeps the ingredients and the photos you left in. The original is not touched. Overwriting is there for fixing a typo in place.
-- **The tree is a panel.** It lights the path from the original to where you are, and a draft shows up as a dashed node.
-- **Ingredients are typed as you say them.** "2 cups flour" or "1/2 tsp salt" becomes an amount, a unit and a name. Ingredients are shared between recipes, and the amounts scale from ½x to 3x without changing what is saved.
-- **It works on a phone.** The list and the recipe take turns on a narrow screen, and buttons and fields grow on touch screens.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/workspace-dark.webp" />
+  <img src="docs/images/workspace-light.webp" alt="The recipe list on the left and banana bread with walnuts open on the right, with its ingredients." />
+</picture>
+
+## Change a recipe without fear
+
+Open any recipe and edit it. Nothing reaches the server while you do. What you change is a draft that stays on your device, photos included, and it survives a reload. A bar at the bottom says so and gives you two ways out: discard the draft or save it.
+
+<img src="docs/images/draft.webp" width="760" alt="A banana bread draft with a new cinnamon line and an Unsaved draft bar with Discard and Save as new version." />
+
+## Save it as a version
+
+Saving makes a new recipe under the one you opened, with the ingredients and the photos you kept. The original stays as it was. The versions panel draws the tree, lights the path from the original to where you are, and shows the draft as a dashed node.
+
+Overwriting is there for fixing a typo in place, and its menu tells you when it would delete a photo.
+
+<img src="docs/images/versions.webp" width="380" alt="The versions panel: banana bread, its walnut version marked You are here, a sibling version, and a dashed draft node." />
+
+## Write ingredients the way you say them
+
+Type "1/2 tsp cinnamon" and hannibox reads an amount, a unit and a name, and shows what it understood before you add it. Ingredients are shared between recipes, so the field suggests the ones you already use. The 1x, 2x and 3x buttons scale the amounts you see without changing what is saved.
+
+<img src="docs/images/quick-add.webp" width="760" alt="The ingredient field with 1/2 tsp cinnamon typed in, read as half a teaspoon of cinnamon." />
+
+## Made for the counter
+
+The list and the recipe take turns on a narrow screen, buttons and fields grow on touch screens, and there is a dark theme. Drag the handle to reorder ingredients.
+
+<img src="docs/images/phones.webp" width="860" alt="Three phone screens: the recipe list, a recipe with its ingredients, and the versions panel." />
 
 ## Stack
 
@@ -53,14 +80,4 @@ bun run dev
 
 Open http://localhost:5173. `bun run dev` applies the migrations to a local D1 first.
 
-## Layout
-
-```
-apps/web         the SPA
-apps/api         the Worker: /api/* and the static build
-packages/auth    Better Auth config
-packages/db      Drizzle schema, D1 migrations and schema.md
-packages/shared  Zod schemas and units
-```
-
-[CONTRIBUTING.md](CONTRIBUTING.md) covers the API routes, the database workflow and the checks. The tables are drawn in [packages/db/schema.md](packages/db/schema.md).
+How the repo is laid out, the API routes and the database workflow are in [CONTRIBUTING.md](CONTRIBUTING.md). The tables are drawn in [packages/db/schema.md](packages/db/schema.md).
