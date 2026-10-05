@@ -177,7 +177,7 @@ export function QuickAdd({
           aria-label={target.title ? `Add an ingredient to ${target.title}` : "Add an ingredient"}
           autoComplete="off"
           enterKeyHint="done"
-          className="h-9 min-w-0 flex-1 truncate bg-transparent text-base outline-none placeholder:text-muted-foreground/70 md:text-sm"
+          className="h-9 min-w-0 flex-1 truncate bg-transparent text-base outline-none placeholder:text-muted-foreground/70 md:text-sm pointer-coarse:h-10"
         />
         {ready && (
           <Button type="submit" size="sm" className="animate-in duration-150 zoom-in-95 fade-in">
@@ -257,14 +257,14 @@ export function QuickAdd({
 function Sign({ heading, name }: { heading: boolean; name: string }) {
   if (heading) {
     return (
-      <span className="flex size-9 shrink-0 animate-in items-center justify-center rounded-xl bg-primary/12 text-primary duration-200 zoom-in-75">
+      <span className="flex size-9 shrink-0 animate-in items-center justify-center rounded-xl bg-primary/12 text-primary duration-200 zoom-in-75 pointer-coarse:size-10">
         <HugeiconsIcon icon={HeadingIcon} strokeWidth={2} className="size-4" />
       </span>
     )
   }
   if (name === "") {
     return (
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-dashed border-primary/50 text-primary">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-dashed border-primary/50 text-primary pointer-coarse:size-10">
         <HugeiconsIcon icon={Add01Icon} strokeWidth={2} className="size-4" />
       </span>
     )
@@ -276,7 +276,7 @@ function Sign({ heading, name }: { heading: boolean; name: string }) {
       icon={art.known ? art.icon : undefined}
       hue={art.hue}
       label={name}
-      className="size-9 animate-in duration-200 zoom-in-75"
+      className="size-9 animate-in duration-200 zoom-in-75 pointer-coarse:size-10"
     />
   )
 }

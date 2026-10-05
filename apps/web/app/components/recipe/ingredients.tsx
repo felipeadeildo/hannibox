@@ -109,6 +109,9 @@ function buzz(pattern: number | number[] = 8): void {
   if ("vibrate" in navigator) navigator.vibrate(pattern)
 }
 
+// The room a line's handle takes, so what sits under the lines starts where their pictures do.
+const GUTTER = "pl-[2.375rem] pointer-coarse:pl-[2.875rem]"
+
 const reveal =
   "pointer-fine:opacity-0 pointer-fine:transition-opacity pointer-fine:group-hover/head:opacity-100 pointer-fine:focus-visible:opacity-100 pointer-fine:data-popup-open:opacity-100"
 
@@ -472,18 +475,21 @@ export function Ingredients({
                     ))}
                   </ul>
                 </SortableContext>
-                {sectioned &&
-                  (section.key === target?.key ? (
-                    <div className="pt-2">{quickAdd}</div>
-                  ) : (
-                    <AddRow
-                      title={section.title}
-                      onClick={() => {
-                        setActive(section.key)
-                        setFocusAdd(true)
-                      }}
-                    />
-                  ))}
+                {sectioned && (
+                  <div className={cn("pt-2", GUTTER)}>
+                    {section.key === target?.key ? (
+                      quickAdd
+                    ) : (
+                      <AddRow
+                        title={section.title}
+                        onClick={() => {
+                          setActive(section.key)
+                          setFocusAdd(true)
+                        }}
+                      />
+                    )}
+                  </div>
+                )}
               </Group>
             )
           })}
@@ -507,13 +513,13 @@ export function Ingredients({
       ) : (
         list
       )}
-      {!sectioned && quickAdd}
-      <div className="flex items-center gap-2 empty:hidden">
+      {!sectioned && <div className={GUTTER}>{quickAdd}</div>}
+      <div className={cn("flex items-center gap-2 empty:hidden", sectioned && GUTTER)}>
         {sections.length < LIMITS.sections && (
           <Button
             variant="ghost"
             size="sm"
-            className="-ml-2 text-muted-foreground"
+            className="-ml-2.5 text-muted-foreground"
             onClick={() => startSection(placeholderTitle(sections), [], true)}
           >
             <HugeiconsIcon icon={Add01Icon} strokeWidth={2} data-icon="inline-start" />
@@ -581,7 +587,7 @@ function Group({
       className={cn("flex flex-col", isDragging && "opacity-40")}
     >
       {sectioned && (
-        <div className="group/head sticky top-0 z-10 flex items-start gap-1 bg-background pt-4 max-md:top-[calc(3.5rem+env(safe-area-inset-top))]">
+        <div className="group/head sticky top-0 z-10 flex items-start gap-2.5 bg-background pt-4 max-md:top-[calc(3.5rem+env(safe-area-inset-top))]">
           {movable ? (
             <button
               type="button"
@@ -771,16 +777,15 @@ function SectionName({
   )
 }
 
-/** Where a section that is not being added to shows a way to add to it. */
+// The quiet twin of the field in `QuickAdd`: the same box, the same square, until it is tapped.
 function AddRow({ title, onClick }: { title: string; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      // Lined up with the pictures of the lines above it, past the room their handles take.
-      className="group/add flex items-center gap-2.5 rounded-xl py-2 pl-[2.375rem] text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 pointer-coarse:pl-[2.875rem]"
+      className="group/add flex w-full items-center gap-3 rounded-2xl border border-dashed border-border/70 px-3 py-2.5 text-left text-base text-muted-foreground transition-colors outline-none hover:border-primary/60 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 active:bg-muted/40 md:text-sm"
     >
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-dashed transition-colors group-hover/add:border-primary/60 group-hover/add:text-primary">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl transition-colors group-hover/add:text-primary pointer-coarse:size-10">
         <HugeiconsIcon icon={Add01Icon} strokeWidth={2} className="size-4" />
       </span>
       {title ? `Add to ${title}` : "Add an ingredient"}
