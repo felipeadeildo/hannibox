@@ -109,9 +109,6 @@ function buzz(pattern: number | number[] = 8): void {
   if ("vibrate" in navigator) navigator.vibrate(pattern)
 }
 
-// The room a line's handle takes, so what sits under the lines starts where their pictures do.
-const GUTTER = "pl-[2.375rem] pointer-coarse:pl-[2.875rem]"
-
 const reveal =
   "pointer-fine:opacity-0 pointer-fine:transition-opacity pointer-fine:group-hover/head:opacity-100 pointer-fine:focus-visible:opacity-100 pointer-fine:data-popup-open:opacity-100"
 
@@ -369,6 +366,7 @@ export function Ingredients({
 
   const quickAdd = (
     <QuickAdd
+      bare
       text={text}
       onText={setText}
       target={target ?? { title: "", names: new Set() }}
@@ -413,9 +411,37 @@ export function Ingredients({
         items={sections.map((section) => `section:${section.key}`)}
         strategy={verticalListSortingStrategy}
       >
-        <div className="flex flex-col">
+        <div className="flex flex-col gap-3">
           {sections.map((section, index) => {
             const rows = view.find((column) => column.key === section.key)?.rows ?? []
+            const lines = (
+              <SortableContext
+                items={rows.map((row) => row.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <ul className="flex flex-col px-2">
+                  {rows.map((row, at) => (
+                    <Line
+                      key={row.id}
+                      id={row.id}
+                      here={section.key}
+                      line={row.line}
+                      saved={saved.get(row.line.name)}
+                      scale={scale}
+                      places={places}
+                      elsewhere={(partsOf.get(row.line.name) ?? []).filter(
+                        (part) => part.key !== section.key,
+                      )}
+                      canSplit={at > 0 && sections.length < LIMITS.sections}
+                      refusedAt={refused?.id === row.id ? refused.at : undefined}
+                      onSave={(next, to) => saveLine(section.key, row.line.name, next, to)}
+                      onSplit={() => splitAt(section.key, at)}
+                      onRemove={() => removeFrom(section, row.line)}
+                    />
+                  ))}
+                </ul>
+              </SortableContext>
+            )
             return (
               <Group
                 key={section.key}
@@ -449,46 +475,26 @@ export function Ingredients({
                   )
                 }
               >
-                <SortableContext
-                  items={rows.map((row) => row.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  <ul className="flex flex-col">
-                    {rows.map((row, at) => (
-                      <Line
-                        key={row.id}
-                        id={row.id}
-                        here={section.key}
-                        line={row.line}
-                        saved={saved.get(row.line.name)}
-                        scale={scale}
-                        places={places}
-                        elsewhere={(partsOf.get(row.line.name) ?? []).filter(
-                          (part) => part.key !== section.key,
-                        )}
-                        canSplit={at > 0 && sections.length < LIMITS.sections}
-                        refusedAt={refused?.id === row.id ? refused.at : undefined}
-                        onSave={(next, to) => saveLine(section.key, row.line.name, next, to)}
-                        onSplit={() => splitAt(section.key, at)}
-                        onRemove={() => removeFrom(section, row.line)}
-                      />
-                    ))}
-                  </ul>
-                </SortableContext>
-                {sectioned && (
-                  <div className={cn("pt-2", GUTTER)}>
-                    {section.key === target?.key ? (
-                      quickAdd
-                    ) : (
-                      <AddRow
-                        title={section.title}
-                        onClick={() => {
-                          setActive(section.key)
-                          setFocusAdd(true)
-                        }}
-                      />
-                    )}
-                  </div>
+                {/* One list is capped on a desk, where a wheel scrolls it. On a phone the page
+                    scrolls, and a list that scrolls inside it would catch a thumb that is only
+                    trying to get past. Sections are not capped: each has its own field to add to. */}
+                {wide && !sectioned ? (
+                  <ScrollArea fade="y" className="max-h-[32rem]">
+                    {lines}
+                  </ScrollArea>
+                ) : (
+                  lines
+                )}
+                {section.key === target?.key ? (
+                  quickAdd
+                ) : (
+                  <AddRow
+                    title={section.title}
+                    onClick={() => {
+                      setActive(section.key)
+                      setFocusAdd(true)
+                    }}
+                  />
                 )}
               </Group>
             )
@@ -503,27 +509,17 @@ export function Ingredients({
 
   return (
     <div className="flex flex-col gap-3">
-      {/* One list is capped on a desk, where a wheel scrolls it. On a phone the page scrolls, and a
-          list that scrolls inside it would catch a thumb that is only trying to get past. Sections
-          are not capped either: each has its own field to add to, which must not hide below. */}
-      {wide && !sectioned ? (
-        <ScrollArea fade="y" className="max-h-[32rem]">
-          {list}
-        </ScrollArea>
-      ) : (
-        list
-      )}
-      {!sectioned && <div className={GUTTER}>{quickAdd}</div>}
-      <div className={cn("flex items-center gap-2 empty:hidden", sectioned && GUTTER)}>
+      {list}
+      <div className="flex items-center gap-2 empty:hidden">
         {sections.length < LIMITS.sections && (
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className="-ml-2.5 text-muted-foreground"
+            className="border-dashed text-muted-foreground hover:text-foreground"
             onClick={() => startSection(placeholderTitle(sections), [], true)}
           >
             <HugeiconsIcon icon={Add01Icon} strokeWidth={2} data-icon="inline-start" />
-            Section
+            New section
           </Button>
         )}
         {/* Worth adding up only when an ingredient goes in more than one section. */}
@@ -584,10 +580,13 @@ function Group({
       style={{ transform: CSS.Translate.toString(transform), transition }}
       role={sectioned ? "group" : undefined}
       aria-label={sectioned ? section.title || "First section" : undefined}
-      className={cn("flex flex-col", isDragging && "opacity-40")}
+      className={cn(
+        "flex flex-col rounded-2xl border border-border/70 bg-background transition-colors focus-within:border-primary/50",
+        isDragging && "opacity-40",
+      )}
     >
       {sectioned && (
-        <div className="group/head sticky top-0 z-10 flex items-start gap-2.5 bg-background pt-4 max-md:top-[calc(3.5rem+env(safe-area-inset-top))]">
+        <div className="group/head sticky top-0 z-10 flex items-start gap-2.5 rounded-t-2xl bg-background px-2 pt-2 max-md:top-[calc(3.5rem+env(safe-area-inset-top))]">
           {movable ? (
             <button
               type="button"
@@ -637,7 +636,7 @@ function SectionHead({
   return (
     <div
       className={cn(
-        "flex h-8 items-center gap-2 transition-colors pointer-coarse:h-10",
+        "flex h-8 items-center gap-2.5 transition-colors pointer-coarse:h-10",
         landing && (landing.clash ? "text-destructive" : "text-primary"),
       )}
     >
@@ -654,15 +653,8 @@ function SectionHead({
           )}
         </button>
       </h3>
-      <span
-        aria-hidden
-        className={cn(
-          "h-0 flex-1 border-t transition-colors",
-          !section.title && "border-dashed",
-          landing && "border-current",
-        )}
-      />
-      <span className="font-heading text-xs text-muted-foreground tabular-nums">
+      <span className="flex-1" />
+      <span className="px-2 font-heading text-xs text-muted-foreground tabular-nums">
         {count}
         <span className="sr-only">{count === 1 ? " ingredient" : " ingredients"}</span>
       </span>
@@ -777,15 +769,16 @@ function SectionName({
   )
 }
 
-// The quiet twin of the field in `QuickAdd`: the same box, the same square, until it is tapped.
+// The last row of a section: the quiet twin of the field in `QuickAdd`, until it is tapped.
 function AddRow({ title, onClick }: { title: string; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="group/add flex w-full items-center gap-3 rounded-2xl border border-dashed border-border/70 px-3 py-2.5 text-left text-base text-muted-foreground transition-colors outline-none hover:border-primary/60 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 active:bg-muted/40 md:text-sm"
+      className="group/add flex w-full items-center gap-2.5 rounded-b-2xl border-t border-dashed border-border/70 px-2 py-2.5 text-left text-base text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset active:bg-muted/40 md:text-sm"
     >
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl transition-colors group-hover/add:text-primary pointer-coarse:size-10">
+      <span aria-hidden className="-ml-1 size-8 shrink-0 pointer-coarse:size-10" />
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl transition-colors group-hover/add:text-primary">
         <HugeiconsIcon icon={Add01Icon} strokeWidth={2} className="size-4" />
       </span>
       {title ? `Add to ${title}` : "Add an ingredient"}

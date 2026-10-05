@@ -80,6 +80,7 @@ const EXAMPLES = [
  * understood, with a picture, before you add it. A line that ends in a colon starts a section.
  */
 export function QuickAdd({
+  bare = false,
   text,
   onText,
   target,
@@ -91,6 +92,8 @@ export function QuickAdd({
   onSection,
   onSplit,
 }: {
+  /** As the last row of a section's card, with no box of its own. */
+  bare?: boolean
   text: string
   onText: (text: string) => void
   target: Target
@@ -162,11 +165,14 @@ export function QuickAdd({
         submit()
       }}
       className={cn(
-        "overflow-hidden rounded-2xl border bg-muted/40 transition-[background-color,border-color,box-shadow] focus-within:border-primary/60 focus-within:bg-background focus-within:ring-3 focus-within:ring-primary/15",
-        reading.kind !== "empty" && "bg-background",
+        bare
+          ? "rounded-b-2xl border-t border-dashed border-border/70"
+          : "overflow-hidden rounded-2xl border bg-muted/40 transition-[background-color,border-color,box-shadow] focus-within:border-primary/60 focus-within:bg-background focus-within:ring-3 focus-within:ring-primary/15",
+        !bare && reading.kind !== "empty" && "bg-background",
       )}
     >
-      <div className="flex items-center gap-3 px-3 py-2.5">
+      <div className={cn("flex items-center py-2.5", bare ? "gap-2.5 px-2" : "gap-3 px-3")}>
+        {bare && <span aria-hidden className="-ml-1 size-8 shrink-0 pointer-coarse:size-10" />}
         <Sign heading={heading} name={name} />
         <input
           ref={input}
