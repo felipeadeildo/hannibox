@@ -1,5 +1,6 @@
 import { z } from "zod"
 
+export * from "./errors"
 export * from "./recipes"
 export * from "./units"
 
@@ -10,6 +11,3 @@ export const GreetingRequest = z.object({
 export function greet(name: string): string {
   return `Hello, ${name}! Welcome to hannibox.`
 }
-
-/** The body of every error the API answers with. */
-export type ApiError = { error: string }

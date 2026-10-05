@@ -1,12 +1,13 @@
 import { HugeiconsIcon } from "~/components/app/icon"
 import { Add01Icon, MinusSignIcon } from "@hugeicons/core-free-icons"
-import { UNITS, type Unit } from "@hannibox/shared"
+import { LIMITS, UNITS, type Unit } from "@hannibox/shared"
 import { cn } from "cn"
+import { useId } from "react"
 
 import { Button } from "~/components/ui/button"
 import { Input } from "~/components/ui/input"
 import { ToggleGroup, ToggleGroupItem } from "~/components/ui/toggle-group"
-import { asUnit, formatQuantity, parseQuantity, unitLabel } from "~/lib/quantity"
+import { asUnit, checkQuantity, formatQuantity, parseQuantity, unitLabel } from "~/lib/quantity"
 
 /** How much one tap of + or − moves an amount, in the unit it is in. */
 function stepFor(unit: Unit | null) {
@@ -24,24 +25,36 @@ function shortcuts(unit: Unit | null) {
   return [0.25, 0.5, 0.75, 1, 2]
 }
 
-/** An amount you can type, nudge with + and −, or pick from the usual ones. */
+/**
+ * An amount you can type, nudge with + and −, or pick from the usual ones. What is typed is
+ * checked as it is typed, and what is wrong with it shows under the field. `optional` lets it be
+ * left empty.
+ */
 export function AmountField({
   label,
   value,
   unit,
+  scale = 1,
+  optional = false,
   onChange,
 }: {
   label: string
   value: string
   unit: Unit | null
+  /** The scale the amount is shown at: it is checked at the recipe's own size. */
+  scale?: number
+  optional?: boolean
   onChange: (text: string) => void
 }) {
+  const errorId = useId()
   const step = stepFor(unit)
-  const amount = parseQuantity(value)
+  const { error } = checkQuantity(value, scale)
+  const amount = error ? null : parseQuantity(value)
+  const problem = optional && value.trim() === "" ? undefined : error
 
   function nudge(direction: 1 | -1) {
     const next = Math.round(((amount ?? 0) + direction * step) * 100) / 100
-    onChange(formatQuantity(Math.max(step, next)))
+    onChange(formatQuantity(Math.min(LIMITS.quantity, Math.max(step, next))))
   }
 
   return (
@@ -63,7 +76,8 @@ export function AmountField({
           inputMode="decimal"
           autoComplete="off"
           aria-label={label}
-          aria-invalid={amount === null}
+          aria-invalid={problem !== undefined}
+          aria-describedby={problem ? errorId : undefined}
           className="text-center font-heading tabular-nums"
         />
         <Button
@@ -76,6 +90,10 @@ export function AmountField({
           <HugeiconsIcon icon={Add01Icon} strokeWidth={2} />
         </Button>
       </div>
+      {/* Always there, so a screen reader hears the problem when it shows up. */}
+      <p id={errorId} className="text-sm text-destructive empty:hidden" aria-live="polite">
+        {problem}
+      </p>
       <div className="flex flex-wrap gap-1.5">
         {shortcuts(unit).map((option) => (
           <Button

@@ -1,11 +1,12 @@
-import { ChefHatIcon } from "@hugeicons/core-free-icons"
+import { AlertCircleIcon, ChefHatIcon } from "@hugeicons/core-free-icons"
 import { QueryClientProvider } from "@tanstack/react-query"
 import { Links, Meta, Outlet, Scripts, ScrollRestoration, isRouteErrorResponse } from "react-router"
 
 import { HugeiconsIcon } from "~/components/app/icon"
+import { Button, buttonVariants } from "~/components/ui/button"
 import { Toaster } from "~/components/ui/sonner"
 import { TooltipProvider } from "~/components/ui/tooltip"
-import { queryClient } from "~/lib/query"
+import { ApiFailure, queryClient } from "~/lib/query"
 import { SITE, pageMeta } from "~/lib/site"
 import { THEME_SCRIPT, useTheme } from "~/lib/theme"
 
@@ -89,26 +90,37 @@ export default function App() {
   )
 }
 
+/** What reaches here broke a whole page. An API failure says why in words meant to be shown. */
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  let message = "Oops!"
-  let details = "An unexpected error occurred."
-  let stack: string | undefined
-
-  if (isRouteErrorResponse(error)) {
-    message = error.status === 404 ? "404" : "Error"
-    details =
-      error.status === 404 ? "The requested page could not be found." : error.statusText || details
-  } else if (import.meta.env.DEV && error && error instanceof Error) {
-    details = error.message
-    stack = error.stack
-  }
+  const missing = isRouteErrorResponse(error) && error.status === 404
+  const title = missing ? "This page is not here" : "Something went wrong"
+  const details = missing
+    ? "The address may be wrong, or the page was taken down."
+    : error instanceof ApiFailure
+      ? error.message
+      : "It was not you. Try again, and if it keeps happening, come back in a little while."
+  const stack = import.meta.env.DEV && error instanceof Error ? error.stack : undefined
 
   return (
-    <main className="container mx-auto p-4 pt-16">
-      <h1>{message}</h1>
-      <p>{details}</p>
+    <main className="flex min-h-svh flex-col items-center justify-center gap-4 p-6 text-center">
+      <HugeiconsIcon
+        icon={AlertCircleIcon}
+        strokeWidth={2}
+        className="size-8 text-muted-foreground"
+      />
+      <div className="flex max-w-sm flex-col gap-1.5">
+        <h1 className="font-heading text-xl font-medium">{title}</h1>
+        <p className="text-sm text-pretty text-muted-foreground">{details}</p>
+      </div>
+      {missing ? (
+        <a href="/" className={buttonVariants()}>
+          Back to recipes
+        </a>
+      ) : (
+        <Button onClick={() => window.location.reload()}>Try again</Button>
+      )}
       {stack && (
-        <pre className="w-full overflow-x-auto p-4">
+        <pre className="max-w-full overflow-x-auto rounded-lg bg-muted p-4 text-left text-xs">
           <code>{stack}</code>
         </pre>
       )}

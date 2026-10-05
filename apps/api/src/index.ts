@@ -33,7 +33,10 @@ app.route("/api", api)
 app.notFound((c) => c.json<ApiError>({ error: "Not found" }, 404))
 app.onError((error, c) => {
   console.error(error)
-  return c.json<ApiError>({ error: "Internal Server Error" }, 500)
+  return c.json<ApiError>(
+    { error: "Something went wrong on our side. Try again in a moment." },
+    500,
+  )
 })
 
 export default app

@@ -15,7 +15,7 @@ import {
 } from "~/components/ui/empty"
 import { Skeleton } from "~/components/ui/skeleton"
 import { isLocalId } from "~/lib/drafts"
-import { ApiFailure, queryClient } from "~/lib/query"
+import { ApiFailure, messageOf, queryClient } from "~/lib/query"
 import { recipeOptions } from "~/lib/recipes"
 
 import type { Route } from "./+types/recipe"
@@ -86,11 +86,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
         </EmptyMedia>
         <EmptyTitle>{gone ? "This recipe is not here" : "Could not open this recipe"}</EmptyTitle>
         <EmptyDescription>
-          {gone
-            ? "It was deleted, or it belongs to another account."
-            : error instanceof Error
-              ? error.message
-              : "Something went wrong."}
+          {gone ? "It was deleted, or it belongs to another account." : messageOf(error)}
         </EmptyDescription>
       </EmptyHeader>
       <EmptyContent>

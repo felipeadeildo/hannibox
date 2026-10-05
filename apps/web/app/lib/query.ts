@@ -1,6 +1,9 @@
 import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query"
 
-/** A reply the API refused. `message` is the `{ error }` it sent. */
+/**
+ * A reply the API refused, or one that never came. `message` is the `error` it sent, written to be
+ * shown as it is; `status` is 0 when the request did not reach the API at all.
+ */
 export class ApiFailure extends Error {
   readonly status: number
 
@@ -9,6 +12,12 @@ export class ApiFailure extends Error {
     this.status = status
   }
 }
+
+export const OFFLINE = "Can't reach hannibox. Check your connection and try again."
+
+/** What to tell a person about a failure, whatever threw it. */
+export const messageOf = (error: unknown, fallback = "Something went wrong. Try again.") =>
+  error instanceof Error && error.message ? error.message : fallback
 
 // A session that ended while the tab stayed open sends the user back to sign in.
 function onError(error: Error) {
@@ -22,7 +31,8 @@ export const queryClient = new QueryClient({
     queries: {
       staleTime: 30_000,
       // A 4xx will answer the same again. Only a flaky network or a 5xx is worth retrying.
-      retry: (count, error) => !(error instanceof ApiFailure && error.status < 500) && count < 2,
+      retry: (count, error) =>
+        !(error instanceof ApiFailure && error.status >= 400 && error.status < 500) && count < 2,
     },
   },
 })
@@ -34,7 +44,7 @@ async function failure(res: Reply) {
   const message =
     typeof body === "object" && body !== null && "error" in body && typeof body.error === "string"
       ? body.error
-      : "Something went wrong"
+      : "Something went wrong. Try again."
   return new ApiFailure(res.status, message)
 }
 

@@ -18,7 +18,7 @@ import { CSS } from "@dnd-kit/utilities"
 import { HugeiconsIcon } from "~/components/app/icon"
 import {
   Add01Icon,
-  ArrowTurnBackwardIcon,
+  AlertCircleIcon,
   Camera01Icon,
   Cancel01Icon,
   DragDropVerticalIcon,
@@ -27,9 +27,9 @@ import {
   WheatIcon,
 } from "@hugeicons/core-free-icons"
 import { useQuery } from "@tanstack/react-query"
-import type { Unit } from "@hannibox/shared"
+import { IngredientLine, IngredientName, LIMITS, type Unit } from "@hannibox/shared"
 import { cn } from "cn"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 
 import { AdaptivePanel } from "~/components/app/adaptive-panel"
@@ -45,16 +45,13 @@ import { Spinner } from "~/components/ui/spinner"
 import { useDebounced } from "~/hooks/use-debounced"
 import { ingredientArt } from "~/lib/art"
 import type { DraftLine } from "~/lib/drafts"
-import { formatQuantity, parseLine, parseQuantity, unitLabel } from "~/lib/quantity"
+import { checkQuantity, formatQuantity, parseLine, unitLabel, unscale } from "~/lib/quantity"
 import { type RecipeDetail, ingredientOptions, useSetIngredientPhoto } from "~/lib/recipes"
 
 /** Changes the list as it is when the change runs, so a late Undo cannot undo more than it should. */
 export type EditLines = (change: (lines: DraftLine[]) => DraftLine[]) => void
 
 type Saved = RecipeDetail["ingredients"][number]
-
-// An amount can be a third of a cup times three, so what is kept is rounded to a sane precision.
-const round = (value: number) => Math.round(value * 10_000) / 10_000
 
 /**
  * The list, which you can change at any scale. The scale is a lens: what you see is what you
@@ -309,7 +306,10 @@ function Photo({ name, saved, className }: { name: string; saved?: Saved; classN
           if (!file) return
           set.mutate(
             { id: saved.ingredientId, file },
-            { onError: (error) => toast.error(error.message) },
+            {
+              onError: (error) =>
+                toast.error("The photo was not changed", { description: error.message }),
+            },
           )
         }}
       />
@@ -335,18 +335,25 @@ function LineForm({
   const [name, setName] = useState(line.name)
   const [quantity, setQuantity] = useState(formatQuantity(line.quantity * scale))
   const [unit, setUnit] = useState<Unit | null>(line.unit)
+  const nameErrorId = useId()
 
-  const amount = parseQuantity(quantity)
-  const clean = name.trim().toLowerCase()
-  const clash = clean !== line.name && taken.has(clean)
-  const valid = amount !== null && clean !== "" && !clash
-
+  // Checked as it is typed, the way the API will check it. The amount says what is wrong with it
+  // under its own field; the name, under this one.
+  const amount = checkQuantity(quantity, scale)
+  const named = IngredientName.safeParse(name)
+  const clean = named.success ? named.data : name.trim().toLowerCase()
+  const nameError = !named.success
+    ? named.error.issues[0]?.message
+    : clean !== line.name && taken.has(clean)
+      ? `${clean} is already in this recipe.`
+      : undefined
   return (
     <form
       className="flex flex-col gap-5"
       onSubmit={(event) => {
         event.preventDefault()
-        if (valid) onSave({ name: clean, quantity: round(amount / scale), unit })
+        if (amount.value !== undefined && !nameError)
+          onSave({ name: clean, quantity: amount.value, unit })
       }}
     >
       <div className="flex flex-col gap-2">
@@ -364,12 +371,21 @@ function LineForm({
             onChange={(event) => setName(event.target.value)}
             autoComplete="off"
             aria-label="Ingredient"
-            aria-invalid={clash}
+            aria-invalid={nameError !== undefined}
+            aria-describedby={nameErrorId}
           />
         </div>
-        {clash && <p className="text-sm text-destructive">{clean} is already in this recipe.</p>}
+        <p id={nameErrorId} className="text-sm text-destructive empty:hidden" aria-live="polite">
+          {nameError}
+        </p>
       </div>
-      <AmountField label="Amount" value={quantity} unit={unit} onChange={setQuantity} />
+      <AmountField
+        label="Amount"
+        value={quantity}
+        unit={unit}
+        scale={scale}
+        onChange={setQuantity}
+      />
       <UnitPicker value={unit} onChange={setUnit} />
       <div className="flex items-center gap-2 pt-1">
         <Button
@@ -380,7 +396,11 @@ function LineForm({
         >
           Remove
         </Button>
-        <Button type="submit" className="ml-auto min-w-24" disabled={!valid}>
+        <Button
+          type="submit"
+          className="ml-auto min-w-24"
+          disabled={amount.value === undefined || nameError !== undefined}
+        >
           Done
         </Button>
       </div>
@@ -408,8 +428,19 @@ function QuickAdd({
   const [example, setExample] = useState(0)
   const parsed = parseLine(text)
   const name = parsed?.name.toLowerCase() ?? ""
-  const clash = taken.has(name)
   const art = ingredientArt(name)
+  // The line as the recipe would keep it, checked the way the API will check it.
+  const line =
+    parsed && IngredientLine.safeParse({ ...parsed, quantity: unscale(parsed.quantity, scale) })
+  const problem = !line
+    ? undefined
+    : taken.has(name)
+      ? `${name} is already in this recipe.`
+      : taken.size >= LIMITS.ingredients
+        ? `A recipe takes up to ${LIMITS.ingredients} ingredients.`
+        : line.success
+          ? undefined
+          : line.error.issues[0]?.message
 
   // While it is empty, the placeholder walks through a few ways to write one.
   useEffect(() => {
@@ -428,8 +459,8 @@ function QuickAdd({
   const loadingOptions = name !== "" && suggestions.isFetching && options.length === 0
 
   function submit() {
-    if (!parsed || clash) return
-    onAdd({ name, quantity: round(parsed.quantity / scale), unit: parsed.unit })
+    if (!line?.success || problem) return
+    onAdd({ ...line.data, unit: line.data.unit ?? null })
     setText("")
     input.current?.focus()
   }
@@ -470,7 +501,7 @@ function QuickAdd({
           enterKeyHint="done"
           className="h-9 min-w-0 flex-1 truncate bg-transparent text-base outline-none placeholder:text-muted-foreground/70 md:text-sm"
         />
-        {parsed && !clash && (
+        {parsed && !problem && (
           <Button type="submit" size="sm" className="animate-in duration-150 zoom-in-95 fade-in">
             Add
             <Kbd className="hidden bg-primary-foreground/15 text-primary-foreground md:inline-flex">
@@ -484,14 +515,14 @@ function QuickAdd({
         <p
           className={cn(
             "flex items-center gap-2 border-t border-dashed px-3 py-2 text-sm",
-            clash ? "text-destructive" : "text-muted-foreground",
+            problem ? "text-destructive" : "text-muted-foreground",
           )}
           aria-live="polite"
         >
-          {clash ? (
+          {problem ? (
             <>
-              <HugeiconsIcon icon={ArrowTurnBackwardIcon} strokeWidth={2} className="size-4" />
-              {name} is already in this recipe.
+              <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={2} className="size-4 shrink-0" />
+              <span className="min-w-0">{problem}</span>
             </>
           ) : (
             <>

@@ -87,8 +87,8 @@ async function writePhotos(db: Db, recipeId: string, photos: File[]) {
   )
 }
 
-const refused = (c: Context<UserEnv>, save: { status: 400 | 413 | 415; error: string }) =>
-  c.json({ error: save.error } satisfies ApiError, save.status)
+const refused = (c: Context<UserEnv>, save: { status: 400 | 413 | 415; body: ApiError }) =>
+  c.json(save.body, save.status)
 
 // Writes the lines in two statements however long the list is. D1 takes 100 bound parameters
 // per query and 50 queries per invocation on the free plan, so each list travels as one JSON

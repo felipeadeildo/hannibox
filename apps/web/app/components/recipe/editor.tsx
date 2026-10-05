@@ -13,7 +13,7 @@ import {
   Notebook01Icon,
   ShoppingBasket01Icon,
 } from "@hugeicons/core-free-icons"
-import type { Unit } from "@hannibox/shared"
+import { CreateVariation, LIMITS, type Unit } from "@hannibox/shared"
 import { useQuery } from "@tanstack/react-query"
 import { cn } from "cn"
 import { Fragment, type ReactNode, useEffect, useMemo, useState } from "react"
@@ -58,7 +58,8 @@ import { draftOf, draftStore, fieldsOf, useWorkingCopy } from "~/lib/drafts"
 import { longDate, timeAgo } from "~/lib/format"
 import { shrinkImage } from "~/lib/image"
 import { keepPhoto, loadPhoto, usePhotoSources } from "~/lib/pending-photos"
-import { formatQuantity, parseQuantity, unitLabel } from "~/lib/quantity"
+import { checkQuantity, formatQuantity, unitLabel } from "~/lib/quantity"
+import { messageOf } from "~/lib/query"
 import {
   type RecipeDetail,
   type SaveMode,
@@ -131,7 +132,7 @@ export function RecipeEditor({ id, base }: { id: string; base?: RecipeDetail }) 
           ],
         }))
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "The photo could not be added")
+        toast.error("The photo was not added", { description: messageOf(error) })
       } finally {
         setAdding((count) => count - 1)
       }
@@ -171,9 +172,12 @@ export function RecipeEditor({ id, base }: { id: string; base?: RecipeDetail }) 
 
   async function run(kind: SaveKind) {
     const fields = fieldsOf(working, base)
-    if (!fields.title) {
-      toast.error("Give the recipe a name first")
-      document.getElementById("recipe-title")?.focus()
+    // Checked here the way the API checks it, so a draft it would refuse never sends its photos.
+    const checked = CreateVariation.safeParse(fields)
+    if (!checked.success) {
+      const issue = checked.error.issues[0]
+      toast.error("It was not saved", { description: issue?.message })
+      if (issue?.path[0] === "title") document.getElementById("recipe-title")?.focus()
       return
     }
     const draft = working
@@ -212,9 +216,10 @@ export function RecipeEditor({ id, base }: { id: string; base?: RecipeDetail }) 
                 label: "Undo",
                 onClick: () => {
                   if (!base) return
-                  void save
+                  save
                     .mutateAsync({ mode, fields: fieldsOf(draftOf(base)) })
                     .then(() => draftStore.put(user.id, id, draft))
+                    .catch(notUndone)
                 },
               },
         })
@@ -230,11 +235,15 @@ export function RecipeEditor({ id, base }: { id: string; base?: RecipeDetail }) 
       void navigate(`/recipes/${result.id}`, { replace: kind === "create" })
       toast.success(kind === "create" ? "Recipe created" : "Saved as a new version", {
         description: result.title,
-        action: { label: "Undo", onClick: () => void undo() },
+        action: { label: "Undo", onClick: () => void undo().catch(notUndone) },
       })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "It was not saved")
+      toast.error("It was not saved", { description: messageOf(error) })
     }
+  }
+
+  function notUndone(error: unknown) {
+    toast.error("It was not undone", { description: messageOf(error) })
   }
 
   function discard() {
@@ -581,7 +590,7 @@ function Header({
           placeholder="Name this recipe…"
           aria-label="Recipe name"
           rows={1}
-          maxLength={200}
+          maxLength={LIMITS.title}
           // On a phone this would raise the keyboard before the person has chosen to type.
           autoFocus={!base && !title && fine}
           className="-mx-2 field-sizing-content min-h-0 resize-none border-transparent bg-transparent px-2 py-1 font-heading text-[1.75rem] leading-tight font-medium text-balance shadow-none hover:bg-muted/60 focus-visible:bg-muted/50 focus-visible:shadow-[0_2px_0_0_var(--primary)] focus-visible:ring-0 md:text-3xl dark:bg-transparent"
@@ -620,6 +629,7 @@ function Header({
               onChange={(event) => onSource(event.target.value)}
               placeholder="Where is it from…"
               aria-label="Source"
+              maxLength={LIMITS.source}
               autoComplete="off"
               className="text-xs md:text-xs"
             />
@@ -681,6 +691,10 @@ function YieldForm({
   onDone: () => void
 }) {
   const [text, setText] = useState(amount === null ? "" : formatQuantity(amount))
+  // Only an amount the API takes reaches the draft. While what is typed is not one, the field
+  // says why, and Done waits for it.
+  const typed = checkQuantity(text)
+  const empty = text.trim() === ""
 
   return (
     <div className="flex flex-col gap-5">
@@ -688,11 +702,12 @@ function YieldForm({
         label="How much it makes"
         value={text}
         unit={unit}
+        optional
         onChange={(next) => {
           setText(next)
-          const parsed = parseQuantity(next)
+          const checked = checkQuantity(next)
           if (next.trim() === "") onChange(null, null)
-          else if (parsed !== null) onChange(parsed, unit)
+          else if (checked.value !== undefined) onChange(checked.value, unit)
         }}
       />
       <UnitPicker value={unit} onChange={(next) => onChange(amount, next)} />
@@ -711,7 +726,12 @@ function YieldForm({
             Remove
           </Button>
         )}
-        <Button type="button" className="ml-auto min-w-24" onClick={onDone}>
+        <Button
+          type="button"
+          className="ml-auto min-w-24"
+          disabled={!empty && typed.error !== undefined}
+          onClick={onDone}
+        >
           Done
         </Button>
       </div>

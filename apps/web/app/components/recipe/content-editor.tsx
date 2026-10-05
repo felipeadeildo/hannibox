@@ -1,3 +1,5 @@
+import { LIMITS } from "@hannibox/shared"
+
 import { Textarea } from "~/components/ui/textarea"
 
 /**
@@ -18,6 +20,7 @@ export function ContentEditor({
       onChange={(event) => onChange(event.target.value)}
       placeholder="Write the steps, one to a line…"
       aria-label="Steps"
+      maxLength={LIMITS.content}
       className="field-sizing-content min-h-64 resize-none rounded-2xl border-transparent bg-muted/50 px-4 py-3.5 text-base leading-7 transition-colors placeholder:leading-7 focus-visible:bg-background md:text-[0.95rem] dark:bg-muted/30"
     />
   )

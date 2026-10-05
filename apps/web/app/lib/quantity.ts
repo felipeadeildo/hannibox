@@ -1,4 +1,4 @@
-import { UNITS, type Unit } from "@hannibox/shared"
+import { Quantity, UNITS, type Unit } from "@hannibox/shared"
 
 const GLYPHS: Record<string, number> = {
   "⅛": 1 / 8,
@@ -31,22 +31,45 @@ const FORMS: [RegExp, (m: RegExpExecArray) => number][] = [
   [/^\d+(?:[.,]\d+)?/, (m) => Number(m[0].replace(",", "."))],
 ]
 
-/** Reads a quantity off the start of `text` and gives back what comes after it. */
+/**
+ * Reads a quantity off the start of `text` and gives back what comes after it. What it reads is
+ * what was typed, `0` and `1/0` too: whether that is an amount is for `checkAmount` to say.
+ */
 export function readQuantity(text: string) {
   for (const [pattern, toNumber] of FORMS) {
     const match = pattern.exec(text)
-    if (match) {
-      const value = toNumber(match)
-      if (value > 0) return { value, rest: text.slice(match[0].length).trim() }
-    }
+    if (match) return { value: toNumber(match), rest: text.slice(match[0].length).trim() }
   }
   return null
 }
 
-/** "1/2", "1 1/2", "1,5" and "½" all work. Null when it is not a quantity. */
+/** "1/2", "1 1/2", "1,5" and "½" all work. Null when it is not a number at all. */
 export function parseQuantity(text: string) {
   const read = readQuantity(text.trim())
   return read && read.rest === "" ? read.value : null
+}
+
+export type Checked = { value: number; error?: undefined } | { value?: undefined; error: string }
+
+/** A number as an amount the API takes, or what is wrong with it, in words to show. */
+export function checkAmount(value: number | null): Checked {
+  const checked = Quantity.safeParse(value)
+  return checked.success
+    ? { value: checked.data }
+    : { error: checked.error.issues[0]?.message ?? "That is not an amount" }
+}
+
+/**
+ * An amount seen at `scale`, back at the recipe's own size. It can be a third of a cup times
+ * three, so it is rounded to a sane precision.
+ */
+export const unscale = (value: number, scale: number) =>
+  Math.round((value / scale) * 10_000) / 10_000
+
+/** The amount typed in `text` at `scale`, back at the recipe's size and checked as the API will. */
+export function checkQuantity(text: string, scale = 1) {
+  const typed = parseQuantity(text)
+  return checkAmount(typed === null ? null : unscale(typed, scale))
 }
 
 const ALIASES = {

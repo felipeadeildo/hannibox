@@ -42,7 +42,7 @@ export function DeleteRecipeDialog({
         onClose()
         if (recipe.id === openId) void navigate("/")
       },
-      onError: (error) => toast.error(error.message),
+      onError: (error) => toast.error("It was not deleted", { description: error.message }),
     })
   }
 

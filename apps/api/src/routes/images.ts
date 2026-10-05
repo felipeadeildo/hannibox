@@ -1,5 +1,5 @@
 import { schema } from "@hannibox/db"
-import { IMAGE_TYPES, MAX_IMAGE_BYTES, isImageType, type ApiError } from "@hannibox/shared"
+import { IMAGE_TYPE_NAMES, MAX_IMAGE_BYTES, isImageType, type ApiError } from "@hannibox/shared"
 import { eq } from "drizzle-orm"
 import { Hono } from "hono"
 import type { Context } from "hono"
@@ -14,14 +14,13 @@ export const ImageUpload = z.object({ file: z.instanceof(File) })
 
 type Owner = { recipeId: string } | { ingredientId: string }
 
-/** Stores an uploaded image for its owner, or says why it can't. */
 export async function storeImage(c: Context<UserEnv>, owner: Owner, file: File) {
   if (!isImageType(file.type)) {
-    return c.json({ error: `Send one of ${IMAGE_TYPES.join(", ")}` } satisfies ApiError, 415)
+    return c.json({ error: `A photo has to be a ${IMAGE_TYPE_NAMES}` } satisfies ApiError, 415)
   }
   if (file.size > MAX_IMAGE_BYTES) {
     return c.json(
-      { error: `The image is over ${MAX_IMAGE_BYTES / 1_000_000} MB` } satisfies ApiError,
+      { error: `A photo has to be under ${MAX_IMAGE_BYTES / 1_000_000} MB` } satisfies ApiError,
       413,
     )
   }
@@ -30,7 +29,7 @@ export async function storeImage(c: Context<UserEnv>, owner: Owner, file: File) 
   const content = new Uint8Array(await file.arrayBuffer())
   const insert = db.insert(image).values({ id, content, mimeType: file.type, ...owner })
   if ("ingredientId" in owner) {
-    // An ingredient has one photo: the new one replaces the old, or nothing changes.
+    // The new photo replaces the old one, or nothing changes.
     await db.batch([db.delete(image).where(eq(image.ingredientId, owner.ingredientId)), insert])
   } else {
     await insert
