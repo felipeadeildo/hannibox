@@ -56,12 +56,20 @@ export const recipe = sqliteTable(
   ],
 )
 
-// Shared by every user. The app stores `name` trimmed and lowercase, because SQLite
-// folds case for ASCII only and "Óleo" must not sit next to "óleo".
-export const ingredient = sqliteTable("ingredient", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull().unique(),
-})
+// Each user has their own, so suggestions and photos never cross accounts. The app stores `name`
+// trimmed and lowercase, because SQLite folds case for ASCII only and "Óleo" must not sit next to
+// "óleo".
+export const ingredient = sqliteTable(
+  "ingredient",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+  },
+  (table) => [uniqueIndex("ingredient_user_id_name_unique").on(table.userId, table.name)],
+)
 
 // A recipe's ingredients come in sections, like "For the poolish" and "For the dough". A list with
 // no headings is one section without a title. Only the first can go without one, because further
@@ -91,9 +99,11 @@ export const recipeIngredient = sqliteTable(
     sectionId: text("section_id")
       .notNull()
       .references(() => recipeSection.id, { onDelete: "cascade" }),
+    // "no action" and not "restrict", like `recipe.parent_id`: deleting a user cascades to their
+    // ingredients and to their recipes' lines, and restrict would fire before the lines are gone.
     ingredientId: text("ingredient_id")
       .notNull()
-      .references(() => ingredient.id, { onDelete: "restrict" }),
+      .references(() => ingredient.id, { onDelete: "no action" }),
     quantity: real("quantity").notNull(),
     unit: text("unit", { enum: UNITS }),
     position: integer("position").notNull(),
@@ -134,7 +144,8 @@ export const recipeRelations = relations(recipe, ({ one, many }) => ({
   images: many(image),
 }))
 
-export const ingredientRelations = relations(ingredient, ({ many }) => ({
+export const ingredientRelations = relations(ingredient, ({ one, many }) => ({
+  user: one(user, { fields: [ingredient.userId], references: [user.id] }),
   lines: many(recipeIngredient),
   images: many(image),
 }))

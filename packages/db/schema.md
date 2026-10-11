@@ -5,6 +5,7 @@ The recipe tables, drawn before they are written in Drizzle. `user` comes from B
 ```mermaid
 erDiagram
     user ||--o{ recipe : owns
+    user ||--o{ ingredient : owns
     recipe |o--o{ recipe : "parent of"
     recipe ||--o{ recipe_section : "lists in"
     recipe_section ||--o{ recipe_ingredient : lists
@@ -31,7 +32,8 @@ erDiagram
 
     ingredient {
         TEXT id PK
-        TEXT name UK "trimmed, lowercase"
+        TEXT user_id FK "cascade"
+        TEXT name "trimmed, lowercase, unique per user"
     }
 
     recipe_section {
@@ -43,7 +45,7 @@ erDiagram
 
     recipe_ingredient {
         TEXT section_id PK, FK "cascade"
-        TEXT ingredient_id PK, FK "restrict"
+        TEXT ingredient_id PK, FK "no action"
         REAL quantity
         TEXT unit "nullable"
         INTEGER position "order in the section"
@@ -62,15 +64,15 @@ erDiagram
 
 - **Recipe tree.** A variation points at the recipe it came from through `parent_id`. The original is `WHERE parent_id IS NULL`, and a whole tree is one recursive CTE. Deleting a recipe that still has variations is refused, so the app moves or deletes them first. The key is `no action`, not `restrict`: restrict fires row by row and would also block the cascade that deletes a user's whole tree. A variation belongs to the same user as its parent; the app enforces that, not the database.
 - **Units.** One list, `UNITS` in `packages/shared/src/units.ts`: `g kg ml L cup glass tbsp tsp pinch`. It types `recipe.yield_unit` and `recipe_ingredient.unit`, and zod checks it at the API. There is no `CHECK` in the database, because changing one means rebuilding the table, and a rebuild with cascading keys is risky on D1. A null unit counts things: "2 eggs".
-- **Ingredients are shared.** One catalog for every user, with a unique name, which the app stores trimmed and lowercase because SQLite folds case for ASCII only ("Óleo" would not match "óleo"). The amount and the unit live on `recipe_ingredient`, so the same flour can be grams in one recipe and cups in another.
+- **Ingredients belong to a user.** One account never suggests or shows another's ingredients. A name is unique per user, and the app stores it trimmed and lowercase because SQLite folds case for ASCII only ("Óleo" would not match "óleo"). A line points at its ingredient with `no action`, not `restrict`, for the same reason as `parent_id`: deleting a user cascades to both their ingredients and their lines. An ingredient that no recipe lists anymore, like one left behind by a fixed typo, stays in the table and drops out of the suggestions. The amount and the unit live on `recipe_ingredient`, so the same flour can be grams in one recipe and cups in another.
 - **Sections.** A recipe's lines come in sections, like "Poolish" and "Dough", and a list with no headings is one section without a title. Only the first section can go without one, which `CHECK (title IS NOT NULL OR position = 0)` enforces, because further down its lines would read as part of the section above. A title is unique in its recipe, and the app also refuses two that differ only in case. An ingredient appears once per section, so flour can be in the poolish and in the dough. `position` keeps the order of the sections in the recipe and of the lines in each section. A line has no `recipe_id`. Its section says which recipe it is in, and deleting the sections deletes their lines.
 - **Images.** An image belongs to exactly one recipe or one ingredient: `CHECK ((recipe_id IS NULL) <> (ingredient_id IS NULL))`. `mime_type` is there so the API can serve the bytes. Never select `content` in a list or a `with`, since it is the bytes: serve it from its own route. The schema lets an ingredient have several images, but the API keeps one photo and replaces it.
 - **Ids and timestamps.** Text ids made by the app (`crypto.randomUUID()`), because D1 has no interactive transaction: a recipe and its ingredients go in one `db.batch`, so the ids must exist before the insert. Timestamps are millisecond integers, like the Better Auth tables.
-- **Indexes.** `recipe(parent_id)`, `recipe(user_id, updated_at)` for the list, the unique `recipe_section(recipe_id, position)` and `recipe_section(recipe_id, title)`, `recipe_ingredient(ingredient_id)`, `image(recipe_id)`, `image(ingredient_id)`.
+- **Indexes.** `recipe(parent_id)`, `recipe(user_id, updated_at)` for the list, the unique `recipe_section(recipe_id, position)` and `recipe_section(recipe_id, title)`, `recipe_ingredient(ingredient_id)`, the unique `ingredient(user_id, name)`, `image(recipe_id)`, `image(ingredient_id)`.
 
 ## Open
 
-- Who may change the photo of a shared ingredient. Today any user can, because the catalog has no owner. The API offers no way to rename or delete an ingredient.
+- The API offers no way to rename or delete an ingredient. Fixing a name in a recipe points its line at another ingredient and leaves the old one unused.
 
 ## Out of scope
 

@@ -95,8 +95,9 @@ const refused = (c: Context<UserEnv>, save: { status: 400 | 413 | 415; body: Api
 // Writes the sections and their lines in three statements however long they are. D1 takes 100
 // bound parameters per query and 50 queries per invocation on the free plan, so each list travels
 // as one JSON and `json_each` unfolds it. An `insert ... select` fills every column, in the
-// schema's order.
-function writeSections(db: Db, recipeId: string, sections: Section[]) {
+// schema's order. A new name becomes an ingredient of the user's, and a line only ever points at
+// one of theirs.
+function writeSections(db: Db, userId: string, recipeId: string, sections: Section[]) {
   const withIds = sections.map((section) => ({ ...section, id: crypto.randomUUID() }))
   // Flour in two sections is one ingredient.
   const everyName = new Set(sections.flatMap(({ lines }) => lines.map(({ name }) => name)))
@@ -120,6 +121,7 @@ function writeSections(db: Db, recipeId: string, sections: Section[]) {
         db
           .select({
             id: sql<string>`value ->> 'id'`.as("id"),
+            userId: sql<string>`${userId}`.as("user_id"),
             name: sql<string>`value ->> 'name'`.as("name"),
           })
           .from(sql`json_each(${names})`)
@@ -147,7 +149,10 @@ function writeSections(db: Db, recipeId: string, sections: Section[]) {
           position: sql<number>`j.value ->> 'position'`.as("position"),
         })
         .from(sql`json_each(${rows}) as j`)
-        .innerJoin(ingredient, sql`${ingredient.name} = j.value ->> 'name'`),
+        .innerJoin(
+          ingredient,
+          and(eq(ingredient.userId, userId), sql`${ingredient.name} = j.value ->> 'name'`),
+        ),
     ),
   ]
 }
@@ -217,7 +222,7 @@ export default new Hono<UserEnv>()
     const id = crypto.randomUUID()
     await db.batch([
       db.insert(recipe).values({ id, userId, ...fields }),
-      ...writeSections(db, id, sections),
+      ...writeSections(db, userId, id, sections),
       ...writePhotos(db, id, save.photos),
     ])
     return c.json(must(await loadRecipe(db, userId, id)), 201)
@@ -258,7 +263,7 @@ export default new Hono<UserEnv>()
       ...(sections
         ? [
             db.delete(recipeSection).where(eq(recipeSection.recipeId, id)),
-            ...writeSections(db, id, sections),
+            ...writeSections(db, userId, id, sections),
           ]
         : []),
       ...writePhotos(db, id, save.photos),
@@ -355,7 +360,7 @@ export default new Hono<UserEnv>()
           .from(sql`json_each(${JSON.stringify(copies)}) as j`)
           .innerJoin(image, sql`${image.id} = j.value ->> 'from'`),
       ),
-      ...writeSections(db, id, sections ?? from.sections),
+      ...writeSections(db, userId, id, sections ?? from.sections),
       ...writePhotos(db, id, save.photos),
     ])
     return c.json(must(await loadRecipe(db, userId, id)), 201)
