@@ -73,7 +73,7 @@ Type _1/2 tsp cinnamon_ and hannibox reads an amount, a unit and a name, and sho
 
 ## Recipes made in parts
 
-A pizza dough has a poolish and a dough. A cake has a batter and a frosting. Type a line that ends in a colon, like _Dough:_, and **what you add next goes under that heading**. The same ingredient can appear in two sections, flour in the poolish and flour in the dough, and _In total_ adds it up for the shopping list.
+A pizza dough has a poolish and a dough. A cake has a batter and a frosting. Type a line that ends in a colon, like _Dough:_, and **what you add next goes under that heading**. You can also lay out the sections first, with _New section_ under the cards, and fill them in later. The same ingredient can appear in two sections, flour in the poolish and flour in the dough, and _In total_ adds it up for the shopping list.
 
 <div align="center">
 <img src="docs/images/sections.webp" width="820" alt="Ingredients in three cards: an unnamed first section with salt, then Poolish and Dough, each ending in its own add row." />

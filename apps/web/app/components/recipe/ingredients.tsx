@@ -384,18 +384,27 @@ export function Ingredients({
     />
   )
 
+  // Shown before the first line too, for those who plan a recipe's parts first.
+  const newSection = sections.length < LIMITS.sections && (
+    <NewSection onClick={() => startSection(placeholderTitle(sections), [], true)} />
+  )
+
   if (sections.length === 0) {
     return (
       <div className="flex flex-col gap-3">
-        <div className="flex flex-col items-center gap-1 rounded-2xl border border-dashed px-4 pt-5 pb-4 text-center">
-          <EmptyArt icons={[WheatIcon, EggsIcon, MilkBottleIcon]} />
-          <p className="font-medium">What goes in?</p>
-          <p className="max-w-xs text-sm text-pretty text-muted-foreground">
-            Type it the way you would say it: “2 cups flour”, “1/2 tsp salt”, “3 eggs”. A line that
-            ends in a colon, like “Dough:”, starts a section.
-          </p>
+        {/* Drawn like a section's card, with the field to add to as its last row. */}
+        <div className="flex flex-col rounded-2xl border border-border/70 bg-background transition-colors focus-within:border-primary/50">
+          <div className="flex flex-col items-center gap-1 px-4 pt-5 pb-4 text-center">
+            <EmptyArt icons={[WheatIcon, EggsIcon, MilkBottleIcon]} />
+            <p className="font-medium">What goes in?</p>
+            <p className="max-w-xs text-sm text-pretty text-muted-foreground">
+              Type it the way you would say it: “2 cups flour”, “1/2 tsp salt”, “3 eggs”. A line
+              that ends in a colon, like “Dough:”, starts a section.
+            </p>
+          </div>
+          {quickAdd}
         </div>
-        {quickAdd}
+        {newSection}
       </div>
     )
   }
@@ -515,25 +524,13 @@ export function Ingredients({
   return (
     <div className="flex flex-col gap-3">
       {list}
-      <div className="flex items-center gap-2 empty:hidden">
-        {sections.length < LIMITS.sections && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="border-dashed text-muted-foreground hover:text-foreground"
-            onClick={() => startSection(placeholderTitle(sections), [], true)}
-          >
-            <HugeiconsIcon icon={Add01Icon} strokeWidth={2} data-icon="inline-start" />
-            New section
-          </Button>
-        )}
-        {/* Worth adding up only when an ingredient goes in more than one section. */}
-        {totals.some(({ parts }) => parts.length > 1) && (
-          <div className="ml-auto">
-            <Totals totals={totals} saved={saved} scale={scale} />
-          </div>
-        )}
-      </div>
+      {newSection}
+      {/* Worth adding up only when an ingredient goes in more than one section. */}
+      {totals.some(({ parts }) => parts.length > 1) && (
+        <div className="flex justify-end">
+          <Totals totals={totals} saved={saved} scale={scale} />
+        </div>
+      )}
     </div>
   )
 }
@@ -773,6 +770,25 @@ function SectionName({
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * The next section, drawn as the outline of a card. Its words sit where the new section's name is
+ * typed, so the field opens in the same place.
+ */
+function NewSection({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group/new flex w-full items-center gap-2.5 rounded-2xl border border-dashed border-muted-foreground/30 px-2 py-2 text-left text-muted-foreground transition-colors outline-none hover:border-primary/50 hover:text-foreground focus-visible:border-primary/50 focus-visible:ring-3 focus-visible:ring-ring/50 active:bg-muted/40"
+    >
+      <span className="-ml-1 flex size-8 shrink-0 items-center justify-center transition-colors group-hover/new:text-primary pointer-coarse:size-10">
+        <HugeiconsIcon icon={Add01Icon} strokeWidth={2} className="size-4" />
+      </span>
+      <span className="font-heading text-[0.95rem]">New section</span>
+    </button>
   )
 }
 
