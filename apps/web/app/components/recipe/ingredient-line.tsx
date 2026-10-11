@@ -7,7 +7,8 @@ import {
   DragDropVerticalIcon,
   ScissorsLineDashedIcon,
 } from "@hugeicons/core-free-icons"
-import { IngredientName, type Unit, firstProblem } from "@hannibox/shared"
+import { IngredientName, LIMITS, type Unit, firstProblem } from "@hannibox/shared"
+import { useQuery } from "@tanstack/react-query"
 import { cn } from "cn"
 import { useEffect, useId, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -19,10 +20,11 @@ import { Button } from "~/components/ui/button"
 import { Input } from "~/components/ui/input"
 import { Spinner } from "~/components/ui/spinner"
 import { ToggleGroup, ToggleGroupItem } from "~/components/ui/toggle-group"
+import { useDebounced } from "~/hooks/use-debounced"
 import { ingredientArt } from "~/lib/art"
 import type { DraftLine } from "~/lib/drafts"
 import { checkQuantity, formatAmount, formatQuantity, formatTotal } from "~/lib/quantity"
-import { type RecipeDetail, useSetIngredientPhoto } from "~/lib/recipes"
+import { type RecipeDetail, ingredientOptions, useSetIngredientPhoto } from "~/lib/recipes"
 import { type Part, type Place, partsText, placeName } from "~/lib/sections"
 
 export type Saved = RecipeDetail["sections"][number]["lines"][number]
@@ -76,7 +78,10 @@ export function Line({
     isDragging,
   } = useSortable({ id, data: { type: "line" } })
   const [open, setOpen] = useState(false)
+  // The name as it is typed, while the name is a field.
+  const [naming, setNaming] = useState<string | null>(null)
   const item = useRef<HTMLLIElement | null>(null)
+  const shown = naming === null ? line.name : naming.trim().toLowerCase()
 
   useEffect(() => {
     if (fresh) item.current?.scrollIntoView({ block: "nearest" })
@@ -118,10 +123,36 @@ export function Line({
       >
         <HugeiconsIcon icon={DragDropVerticalIcon} strokeWidth={2} className="size-4" />
       </button>
-      <Photo name={line.name} saved={saved} />
-      <span className="min-w-0 flex-1 truncate text-[0.95rem] first-letter:uppercase">
-        {line.name}
-      </span>
+      {/* Renamed to another ingredient, the photo no longer applies: it shows that one's icon. */}
+      <Photo
+        key={shown === line.name ? "own" : shown}
+        name={shown || "?"}
+        saved={shown === line.name ? saved : undefined}
+      />
+      <div className="min-w-0 flex-1">
+        {naming === null ? (
+          <button
+            type="button"
+            onClick={() => setNaming(line.name)}
+            aria-label={`Rename ${line.name}`}
+            className="-mx-1.5 block max-w-full truncate rounded-md px-1.5 py-0.5 text-left text-[0.95rem] outline-none first-letter:uppercase hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            {line.name}
+          </button>
+        ) : (
+          <LineName
+            value={naming}
+            problem={renameProblem(shown, line, here, places)}
+            taken={places.find((place) => place.key === here)?.names ?? new Set()}
+            onChange={setNaming}
+            onDone={(name) => {
+              setNaming(null)
+              if (name !== line.name) onSave({ ...line, name }, here)
+            }}
+            onCancel={() => setNaming(null)}
+          />
+        )}
+      </div>
       <AdaptivePanel
         open={open}
         onOpenChange={setOpen}
@@ -156,13 +187,95 @@ export function Line({
       <Button
         variant="ghost"
         size="icon-sm"
-        className={cn("-mr-1 text-muted-foreground", reveal)}
+        className={cn("-mr-1 text-muted-foreground", reveal, naming !== null && "invisible")}
         aria-label={`Remove ${line.name}`}
         onClick={onRemove}
       >
         <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
       </Button>
     </li>
+  )
+}
+
+/**
+ * The name of a line, typed where it shows, to fix a typo without leaving the list. It changes this
+ * recipe only. Enter or leaving the field keeps it, and so does tapping one of the user's
+ * ingredients. A name that can't be kept puts the old one back.
+ */
+function LineName({
+  value,
+  problem,
+  taken,
+  onChange,
+  onDone,
+  onCancel,
+}: {
+  value: string
+  problem: string | undefined
+  /** The names in the line's section, which it can't take. */
+  taken: Set<string>
+  onChange: (value: string) => void
+  onDone: (name: string) => void
+  onCancel: () => void
+}) {
+  const errorId = useId()
+  const name = value.trim().toLowerCase()
+  const query = useDebounced(name, 250)
+  const suggestions = useQuery({ ...ingredientOptions(query), enabled: query !== "" })
+  const options = (suggestions.data?.items ?? [])
+    .filter((item) => item.name !== name && !taken.has(item.name))
+    .slice(0, 6)
+
+  return (
+    <div className="flex flex-col gap-2">
+      <input
+        autoFocus
+        onFocus={(event) => event.currentTarget.select()}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") onCancel()
+          if (event.key !== "Enter") return
+          event.preventDefault()
+          if (!problem) onDone(name)
+        }}
+        onBlur={() => {
+          if (problem) onCancel()
+          else onDone(name)
+        }}
+        aria-label="Ingredient"
+        aria-invalid={problem !== undefined}
+        aria-describedby={errorId}
+        maxLength={LIMITS.ingredientName}
+        enterKeyHint="done"
+        autoComplete="off"
+        className="h-7 w-full border-b-2 border-primary bg-transparent text-base outline-none md:text-[0.95rem] pointer-coarse:h-9"
+      />
+      <p id={errorId} className="text-sm text-destructive empty:hidden" aria-live="polite">
+        {problem}
+      </p>
+      {options.length > 0 && (
+        <div
+          className="flex flex-wrap gap-1.5"
+          role="group"
+          aria-label="Ingredients you already use"
+        >
+          {options.map((item) => (
+            <Button
+              key={item.id}
+              type="button"
+              variant="outline"
+              size="sm"
+              // Keeps the focus in the field, so its blur does not save before the click picks a name.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => onDone(item.name)}
+            >
+              {item.name}
+            </Button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -228,19 +341,20 @@ function Photo({ name, saved, className }: { name: string; saved?: Saved; classN
   )
 }
 
-/** Why the line cannot be called `name` in `place`, or undefined when it can. */
+/** Why the line in section `here` cannot be called `name` in section `to`, or undefined when it can. */
 function renameProblem(
   name: string,
   line: DraftLine,
-  place: Place | undefined,
   here: string,
-  many: boolean,
+  places: Place[],
+  to = here,
 ): string | undefined {
   const named = IngredientName.safeParse(name)
   if (!named.success) return firstProblem(named.error)
-  const itself = place?.key === here && name === line.name
+  const place = places.find((each) => each.key === to)
+  const itself = to === here && name === line.name
   if (place && !itself && place.names.has(name)) {
-    return `${name} is already in ${placeName(place.title, many)}.`
+    return `${name} is already in ${placeName(place.title, places.length > 1)}.`
   }
   return undefined
 }
@@ -284,11 +398,10 @@ function LineForm({
   const amount = checkQuantity(quantity, scale)
   const clean = name.trim().toLowerCase()
   const many = places.length > 1
-  const placeOf = (key: string) => places.find((place) => place.key === key)
   // Renamed and moved at once, the line also has to be free of a twin where it is now.
   const nameError =
-    renameProblem(clean, line, placeOf(to), here, many) ??
-    (to === here ? undefined : renameProblem(clean, line, placeOf(here), here, many))
+    renameProblem(clean, line, here, places, to) ??
+    (to === here ? undefined : renameProblem(clean, line, here, places))
 
   return (
     <form

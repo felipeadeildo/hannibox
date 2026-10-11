@@ -61,7 +61,7 @@ Overwriting is there for fixing a typo in place, and its menu tells you when it 
 
 ## Write ingredients the way you say them
 
-Type _1/2 tsp cinnamon_ and hannibox reads an amount, a unit and a name, and shows what it understood before you add it. Ingredients are shared between recipes, so the field suggests the ones you already use. The ½×, 1×, 2× and 3× buttons **scale the amounts you see** without changing what is saved.
+Type _1/2 tsp cinnamon_ and hannibox reads an amount, a unit and a name, and shows what it understood before you add it. The field suggests the ingredients your recipes already use, and you can tap a name to fix a typo. The ½×, 1×, 2× and 3× buttons **scale the amounts you see** without changing what is saved.
 
 <div align="center">
 <img src="docs/images/quick-add.webp" width="820" alt="The ingredient field with 1/2 tsp cinnamon typed in, read as half a teaspoon of cinnamon." />
