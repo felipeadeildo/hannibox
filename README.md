@@ -116,6 +116,7 @@ hannibox is **built for a phone propped against the flour tin**. The list and th
 | Web     | React Router as a SPA, TanStack Query, Tailwind, shadcn/ui |
 | API     | Hono on Cloudflare Workers                                 |
 | Data    | D1 with Drizzle, Better Auth for email and password        |
+| Email   | Cloudflare Email Sending, for password resets              |
 | Tooling | Bun workspaces, Oxlint, Oxfmt, Lefthook                    |
 
 </div>
