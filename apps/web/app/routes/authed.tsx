@@ -1,6 +1,5 @@
 import { HugeiconsIcon } from "~/components/app/icon"
 import {
-  ChefHatIcon,
   ComputerIcon,
   LockPasswordIcon,
   Logout01Icon,
@@ -10,12 +9,13 @@ import {
 } from "@hugeicons/core-free-icons"
 import { cn } from "cn"
 import { useState } from "react"
-import { Link, Outlet, redirect, useParams, useSubmit } from "react-router"
+import { Outlet, redirect, useParams, useSubmit } from "react-router"
 
 import { ChangePasswordDialog } from "~/components/app/change-password"
 import { CommandsProvider, useCommands } from "~/components/app/commands"
 import { PhotoCleanup } from "~/components/app/photo-cleanup"
 import { ThemeToggle } from "~/components/app/theme-toggle"
+import { Wordmark } from "~/components/app/wordmark"
 import { Avatar, AvatarFallback } from "~/components/ui/avatar"
 import { Button } from "~/components/ui/button"
 import {
@@ -88,17 +88,7 @@ function Header({ name, email }: { name: string; email: string }) {
         inRecipe ? "hidden" : "flex",
       )}
     >
-      <Link
-        to="/"
-        className="mr-auto flex items-center gap-2 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-      >
-        <span className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <HugeiconsIcon icon={ChefHatIcon} strokeWidth={2} className="size-4" />
-        </span>
-        <span className="font-heading text-sm font-medium tracking-tight" translate="no">
-          hannibox
-        </span>
-      </Link>
+      <Wordmark className="mr-auto" />
 
       {/* A phone gets an icon like its neighbours; a desk gets the field-shaped button with its shortcut. */}
       <Button

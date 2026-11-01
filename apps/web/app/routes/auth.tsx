@@ -1,10 +1,16 @@
 import { SignIn, SignUp } from "@hannibox/shared"
-import { useEffect, useRef, useState } from "react"
-import { Form, Link, redirect, useNavigation } from "react-router"
+import { useState } from "react"
+import { Link, redirect, useNavigation } from "react-router"
 
-import { AuthInput, fieldErrors, focusFirstError } from "~/components/app/auth-field"
+import {
+  AuthCard,
+  AuthForm,
+  AuthInput,
+  FooterButton,
+  FormError,
+  fieldErrors,
+} from "~/components/app/auth-card"
 import { Button } from "~/components/ui/button"
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "~/components/ui/card"
 import { type AuthErrors, authClient, authErrors, readSession } from "~/lib/auth-client"
 import { OFFLINE } from "~/lib/query"
 import { pageMeta } from "~/lib/site"
@@ -73,63 +79,47 @@ export default function Auth({ actionData }: Route.ComponentProps) {
   const submitting = useNavigation().state === "submitting"
   const copy = COPY[mode]
   const errors = actionData?.intent === mode ? actionData.errors : {}
-  const form = useRef<HTMLFormElement>(null)
-
-  // After a refusal, the cursor goes to the first field that has something to fix.
-  useEffect(() => {
-    if (actionData) focusFirstError(form.current, actionData.errors)
-  }, [actionData])
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-6">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>{copy.title}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {/* The browser's own bubbles speak the browser's language and vanish; these stay. */}
-          <Form ref={form} method="post" noValidate className="flex flex-col gap-4">
-            {mode === "sign-up" && (
-              <AuthInput name="name" label="Name" autoComplete="name" error={errors.name} />
-            )}
-            <AuthInput
-              name="email"
-              label="Email"
-              type="email"
-              autoComplete="email"
-              error={errors.email}
-            />
-            <AuthInput
-              name="password"
-              label="Password"
-              type="password"
-              autoComplete={mode === "sign-up" ? "new-password" : "current-password"}
-              error={errors.password}
-              aside={
-                mode === "sign-in" && (
-                  <Link
-                    to="/reset-password"
-                    className="rounded-sm text-sm text-muted-foreground underline-offset-4 outline-none hover:text-foreground hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
-                  >
-                    Forgot it?
-                  </Link>
-                )
-              }
-            />
-            <p className="text-sm text-destructive empty:hidden" role="alert">
-              {errors.form}
-            </p>
-            <Button type="submit" name="intent" value={mode} disabled={submitting}>
-              {copy.title}
-            </Button>
-          </Form>
-        </CardContent>
-        <CardFooter>
-          <Button variant="link" className="px-0" onClick={() => setMode(copy.switchTo)}>
-            {copy.switchLabel}
-          </Button>
-        </CardFooter>
-      </Card>
-    </main>
+    <AuthCard
+      title={copy.title}
+      footer={
+        <FooterButton onClick={() => setMode(copy.switchTo)}>{copy.switchLabel}</FooterButton>
+      }
+    >
+      <AuthForm errors={errors}>
+        {mode === "sign-up" && (
+          <AuthInput name="name" label="Name" autoComplete="name" error={errors.name} />
+        )}
+        <AuthInput
+          name="email"
+          label="Email"
+          type="email"
+          autoComplete="email"
+          error={errors.email}
+        />
+        <AuthInput
+          name="password"
+          label="Password"
+          type="password"
+          autoComplete={mode === "sign-up" ? "new-password" : "current-password"}
+          error={errors.password}
+          aside={
+            mode === "sign-in" && (
+              <Link
+                to="/reset-password"
+                className="rounded-sm text-sm text-muted-foreground underline-offset-4 outline-none hover:text-foreground hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
+              >
+                Forgot it?
+              </Link>
+            )
+          }
+        />
+        <FormError>{errors.form}</FormError>
+        <Button type="submit" name="intent" value={mode} disabled={submitting}>
+          {copy.title}
+        </Button>
+      </AuthForm>
+    </AuthCard>
   )
 }

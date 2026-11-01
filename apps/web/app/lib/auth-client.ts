@@ -11,6 +11,9 @@ export type AuthErrors = Partial<Record<AuthField | "form", string>>
 
 type Code = keyof typeof authClient.$ERROR_CODES
 
+/** A reset link past its hour, or one already used. */
+export const EXPIRED_LINK = "This link has expired or was already used. Ask for a new one."
+
 const ALREADY_TAKEN: AuthErrors = {
   email: "There is already an account with this email. Sign in instead.",
 }
@@ -26,7 +29,7 @@ const MESSAGES: Partial<Record<Code, AuthErrors>> = {
   PASSWORD_TOO_SHORT: { password: "That password is too short" },
   PASSWORD_TOO_LONG: { password: "That password is too long" },
   INVALID_PASSWORD: { currentPassword: "That isn't your current password" },
-  INVALID_TOKEN: { form: "This link has expired or was already used. Ask for a new one." },
+  INVALID_TOKEN: { form: EXPIRED_LINK },
   SESSION_EXPIRED: { form: "Your session is too old for this. Sign in again, then retry." },
 }
 
