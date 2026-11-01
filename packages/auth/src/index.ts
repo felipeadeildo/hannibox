@@ -48,7 +48,13 @@ export function createAuth({ db, secret, baseURL, sendEmail, waitUntil }: AuthCo
     hooks: { before: checkName },
     // A signed cookie answers most session checks without a D1 read.
     session: { cookieCache: { enabled: true, maxAge: 5 * 60 } },
-    advanced: { cookiePrefix: "hannibox", backgroundTasks: { handler: waitUntil } },
+    advanced: {
+      cookiePrefix: "hannibox",
+      backgroundTasks: { handler: waitUntil },
+      // Cloudflare puts the visitor's address here. Without it the rate limit has no address to
+      // key on and counts everyone in one bucket, so one person's retries lock out all the others.
+      ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
+    },
   })
 }
 
