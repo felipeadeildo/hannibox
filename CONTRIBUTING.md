@@ -25,6 +25,14 @@ The Worker creates the Better Auth instance per request in `apps/api/src/auth.ts
 
 In the SPA, `/auth` signs in, signs up and signs out, each through its `clientAction`. Pages that need a user go under the `routes/authed.tsx` layout, whose `clientLoader` redirects to `/auth` without a session. `useUser()` reads the user inside it.
 
+### Passwords
+
+`/reset-password` asks for an email and sends a link. The link goes through Better Auth, which brings the person back with `?token=` to choose a new password, or with `?error=INVALID_TOKEN` when the link expired (after an hour) or was used. A reset signs out every device. The answer to the request is the same whether an account uses the email or not, and the email goes out in `waitUntil` after it, so how long it takes says nothing either. A signed-in person changes their password from the account menu, which signs out their other devices.
+
+The email goes through Cloudflare Email Sending: the `EMAIL` binding in `wrangler.jsonc`, from `no-reply@hannibox.adeildo.dev`. That subdomain is onboarded in the `adeildo.dev` zone, which holds its SPF, DKIM and DMARC records. `packages/auth` writes the email and takes a `sendEmail` function, so it doesn't know how mail is sent. Under `wrangler dev` nothing is sent: the binding writes each email to `apps/api/.wrangler/tmp/email/` and logs the path.
+
+A session checked through the cookie cache keeps working for up to five minutes after it is revoked, sign out included.
+
 ## Database
 
 After changing the auth config or the schema, run `bun run db:generate`. It regenerates `packages/db/src/auth.ts` from the Better Auth config, then writes a migration to `packages/db/migrations`. The recipe tables are in `packages/db/src/recipes.ts`, written by hand, and `schema.ts` joins the two. Commit both. `bun run dev` applies it locally, and the deploy applies it to the remote D1 before publishing.

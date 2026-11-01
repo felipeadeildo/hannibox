@@ -4,7 +4,8 @@ import { ApiFailure, OFFLINE } from "./query"
 
 export const authClient = createAuthClient()
 
-export type AuthField = "name" | "email" | "password"
+// `password` is also the new one when resetting or changing it; Better Auth calls that `newPassword`.
+export type AuthField = "name" | "email" | "password" | "currentPassword"
 /** What went wrong, by the field it is about, and `form` for what is about none of them. */
 export type AuthErrors = Partial<Record<AuthField | "form", string>>
 
@@ -24,6 +25,9 @@ const MESSAGES: Partial<Record<Code, AuthErrors>> = {
   INVALID_EMAIL: { email: "That email doesn't look right" },
   PASSWORD_TOO_SHORT: { password: "That password is too short" },
   PASSWORD_TOO_LONG: { password: "That password is too long" },
+  INVALID_PASSWORD: { currentPassword: "That isn't your current password" },
+  INVALID_TOKEN: { form: "This link has expired or was already used. Ask for a new one." },
+  SESSION_EXPIRED: { form: "Your session is too old for this. Sign in again, then retry." },
 }
 
 const isCode = (code: string | undefined): code is Code => code !== undefined && code in MESSAGES
@@ -35,8 +39,12 @@ export function authErrors(error: { code?: string; message?: string; status: num
   // Our own check on sign up, in `packages/auth`, which words its message for a person already.
   if (error.code === "INVALID_NAME" && error.message) return { name: error.message }
   // A body that failed Better Auth's own validation reads "[body.email] Invalid email address".
-  const field = /^\[body\.(name|email|password)\]\s*(.+)$/.exec(error.message ?? "")
-  if (field?.[1] && field[2]) return { [field[1]]: field[2] }
+  const field = /^\[body\.(name|email|password|newPassword|currentPassword)\]\s*(.+)$/.exec(
+    error.message ?? "",
+  )
+  if (field?.[1] && field[2]) {
+    return { [field[1] === "newPassword" ? "password" : field[1]]: field[2] }
+  }
   if (error.status >= 500)
     return { form: "Something went wrong on our side. Try again in a moment." }
   return { form: error.message || "Something went wrong. Try again." }

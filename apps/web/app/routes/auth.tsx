@@ -1,27 +1,17 @@
 import { SignIn, SignUp } from "@hannibox/shared"
-import { type ComponentProps, useEffect, useId, useRef, useState } from "react"
-import { Form, redirect, useNavigation } from "react-router"
-import type { z } from "zod"
+import { useEffect, useRef, useState } from "react"
+import { Form, Link, redirect, useNavigation } from "react-router"
 
+import { AuthInput, fieldErrors, focusFirstError } from "~/components/app/auth-field"
 import { Button } from "~/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "~/components/ui/card"
-import { Input } from "~/components/ui/input"
-import { Label } from "~/components/ui/label"
-import {
-  type AuthErrors,
-  type AuthField,
-  authClient,
-  authErrors,
-  readSession,
-} from "~/lib/auth-client"
+import { type AuthErrors, authClient, authErrors, readSession } from "~/lib/auth-client"
 import { OFFLINE } from "~/lib/query"
 import { pageMeta } from "~/lib/site"
 
 import type { Route } from "./+types/auth"
 
 type Mode = "sign-in" | "sign-up"
-
-const FIELDS: AuthField[] = ["name", "email", "password"]
 
 const COPY = {
   "sign-in": { title: "Sign in", switchTo: "sign-up", switchLabel: "Create an account" },
@@ -41,16 +31,6 @@ export function meta() {
 export async function clientLoader() {
   if (await readSession().catch(() => null)) throw redirect("/")
   return null
-}
-
-/** What a refused value is wrong with, under the field it came from. */
-function fieldErrors(error: z.core.$ZodError) {
-  const errors: AuthErrors = {}
-  for (const issue of error.issues) {
-    const field = FIELDS.find((name) => name === issue.path[0])
-    if (field) errors[field] ??= issue.message
-  }
-  return errors
 }
 
 /**
@@ -97,9 +77,7 @@ export default function Auth({ actionData }: Route.ComponentProps) {
 
   // After a refusal, the cursor goes to the first field that has something to fix.
   useEffect(() => {
-    if (!actionData) return
-    const first = FIELDS.find((field) => actionData.errors[field])
-    if (first) form.current?.querySelector<HTMLInputElement>(`[name="${first}"]`)?.focus()
+    if (actionData) focusFirstError(form.current, actionData.errors)
   }, [actionData])
 
   return (
@@ -112,21 +90,31 @@ export default function Auth({ actionData }: Route.ComponentProps) {
           {/* The browser's own bubbles speak the browser's language and vanish; these stay. */}
           <Form ref={form} method="post" noValidate className="flex flex-col gap-4">
             {mode === "sign-up" && (
-              <Field name="name" label="Name" autoComplete="name" error={errors.name} />
+              <AuthInput name="name" label="Name" autoComplete="name" error={errors.name} />
             )}
-            <Field
+            <AuthInput
               name="email"
               label="Email"
               type="email"
               autoComplete="email"
               error={errors.email}
             />
-            <Field
+            <AuthInput
               name="password"
               label="Password"
               type="password"
               autoComplete={mode === "sign-up" ? "new-password" : "current-password"}
               error={errors.password}
+              aside={
+                mode === "sign-in" && (
+                  <Link
+                    to="/reset-password"
+                    className="rounded-sm text-sm text-muted-foreground underline-offset-4 outline-none hover:text-foreground hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
+                  >
+                    Forgot it?
+                  </Link>
+                )
+              }
             />
             <p className="text-sm text-destructive empty:hidden" role="alert">
               {errors.form}
@@ -143,30 +131,5 @@ export default function Auth({ actionData }: Route.ComponentProps) {
         </CardFooter>
       </Card>
     </main>
-  )
-}
-
-function Field({
-  name,
-  label,
-  error,
-  ...props
-}: ComponentProps<"input"> & { name: string; label: string; error?: string }) {
-  const errorId = useId()
-  return (
-    <div className="flex flex-col gap-2">
-      <Label htmlFor={name}>{label}</Label>
-      <Input
-        id={name}
-        name={name}
-        required
-        aria-invalid={error !== undefined}
-        aria-describedby={error ? errorId : undefined}
-        {...props}
-      />
-      <p id={errorId} className="text-sm text-destructive empty:hidden" aria-live="polite">
-        {error}
-      </p>
-    </div>
   )
 }

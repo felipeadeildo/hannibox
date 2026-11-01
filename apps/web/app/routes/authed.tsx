@@ -2,14 +2,17 @@ import { HugeiconsIcon } from "~/components/app/icon"
 import {
   ChefHatIcon,
   ComputerIcon,
+  LockPasswordIcon,
   Logout01Icon,
   Moon02Icon,
   Search01Icon,
   Sun03Icon,
 } from "@hugeicons/core-free-icons"
 import { cn } from "cn"
+import { useState } from "react"
 import { Link, Outlet, redirect, useParams, useSubmit } from "react-router"
 
+import { ChangePasswordDialog } from "~/components/app/change-password"
 import { CommandsProvider, useCommands } from "~/components/app/commands"
 import { PhotoCleanup } from "~/components/app/photo-cleanup"
 import { ThemeToggle } from "~/components/app/theme-toggle"
@@ -75,6 +78,7 @@ function Header({ name, email }: { name: string; email: string }) {
   const { theme, setTheme } = useTheme()
   const submit = useSubmit()
   const inRecipe = useParams().id !== undefined
+  const [changingPassword, setChangingPassword] = useState(false)
 
   return (
     <header
@@ -149,6 +153,10 @@ function Header({ name, email }: { name: string; email: string }) {
             ))}
           </DropdownMenuRadioGroup>
           <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => setChangingPassword(true)}>
+            <HugeiconsIcon icon={LockPasswordIcon} strokeWidth={2} />
+            Change password
+          </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => submit({ intent: "sign-out" }, { method: "post", action: "/auth" })}
           >
@@ -157,6 +165,11 @@ function Header({ name, email }: { name: string; email: string }) {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      <ChangePasswordDialog
+        email={email}
+        open={changingPassword}
+        onOpenChange={setChangingPassword}
+      />
     </header>
   )
 }
