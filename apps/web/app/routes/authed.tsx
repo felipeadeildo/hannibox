@@ -1,18 +1,21 @@
 import { HugeiconsIcon } from "~/components/app/icon"
 import {
-  ChefHatIcon,
   ComputerIcon,
+  LockPasswordIcon,
   Logout01Icon,
   Moon02Icon,
   Search01Icon,
   Sun03Icon,
 } from "@hugeicons/core-free-icons"
 import { cn } from "cn"
-import { Link, Outlet, redirect, useParams, useSubmit } from "react-router"
+import { useState } from "react"
+import { Outlet, redirect, useParams, useSubmit } from "react-router"
 
+import { ChangePasswordDialog } from "~/components/app/change-password"
 import { CommandsProvider, useCommands } from "~/components/app/commands"
 import { PhotoCleanup } from "~/components/app/photo-cleanup"
 import { ThemeToggle } from "~/components/app/theme-toggle"
+import { Wordmark } from "~/components/app/wordmark"
 import { Avatar, AvatarFallback } from "~/components/ui/avatar"
 import { Button } from "~/components/ui/button"
 import {
@@ -75,6 +78,7 @@ function Header({ name, email }: { name: string; email: string }) {
   const { theme, setTheme } = useTheme()
   const submit = useSubmit()
   const inRecipe = useParams().id !== undefined
+  const [changingPassword, setChangingPassword] = useState(false)
 
   return (
     <header
@@ -84,17 +88,7 @@ function Header({ name, email }: { name: string; email: string }) {
         inRecipe ? "hidden" : "flex",
       )}
     >
-      <Link
-        to="/"
-        className="mr-auto flex items-center gap-2 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-      >
-        <span className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <HugeiconsIcon icon={ChefHatIcon} strokeWidth={2} className="size-4" />
-        </span>
-        <span className="font-heading text-sm font-medium tracking-tight" translate="no">
-          hannibox
-        </span>
-      </Link>
+      <Wordmark className="mr-auto" />
 
       {/* A phone gets an icon like its neighbours; a desk gets the field-shaped button with its shortcut. */}
       <Button
@@ -149,6 +143,10 @@ function Header({ name, email }: { name: string; email: string }) {
             ))}
           </DropdownMenuRadioGroup>
           <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => setChangingPassword(true)}>
+            <HugeiconsIcon icon={LockPasswordIcon} strokeWidth={2} />
+            Change password
+          </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => submit({ intent: "sign-out" }, { method: "post", action: "/auth" })}
           >
@@ -157,6 +155,11 @@ function Header({ name, email }: { name: string; email: string }) {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      <ChangePasswordDialog
+        email={email}
+        open={changingPassword}
+        onOpenChange={setChangingPassword}
+      />
     </header>
   )
 }

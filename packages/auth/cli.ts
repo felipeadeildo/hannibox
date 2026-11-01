@@ -7,4 +7,6 @@ export const auth = createAuth({
   db: drizzle(async () => ({ rows: [] })),
   secret: "cli-only-secret-that-is-long-enough-to-pass",
   baseURL: "http://localhost:8787",
+  sendEmail: async () => {},
+  waitUntil: () => {},
 })

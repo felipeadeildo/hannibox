@@ -21,6 +21,10 @@
       "migrations_dir": "../../packages/db/migrations",
     },
   ],
+  // Cloudflare Email Sending, onboarded on hannibox.adeildo.dev. Only the reset email uses it.
+  "send_email": [
+    { "name": "EMAIL", "allowed_sender_addresses": ["no-reply@hannibox.adeildo.dev"] },
+  ],
   // Better Auth reads `NODE_ENV` for secure cookies and rate limits. `.dev.vars` overrides it.
   "vars": { "NODE_ENV": "production" },
   "secrets": { "required": ["BETTER_AUTH_SECRET"] },
